@@ -67,6 +67,8 @@ L'écran s'ouvre sur les pistes à convertir, avant les missions détectées et 
 
 ## Adaptation ATS
 
+Le profil conserve également un document Word maître dans PostgreSQL, hors du dépôt GitHub. Lors de l'import, MissionFlow extrait son texte pour alimenter l'analyse ATS. L'utilisateur peut retélécharger le Word original ou demander une conversion PDF à la volée via LibreOffice dans le conteneur ; aucun fichier temporaire n'est conservé après la réponse.
+
 ```mermaid
 sequenceDiagram
     participant U as Utilisateur

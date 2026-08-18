@@ -1,10 +1,18 @@
 from contextlib import asynccontextmanager
+from hashlib import sha256
 import hmac
+from io import BytesIO
+import os
 from pathlib import Path
+import shutil
+import subprocess
+from tempfile import TemporaryDirectory
+import zipfile
+from xml.etree import ElementTree
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from authlib.integrations.starlette_client import OAuth, OAuthError
@@ -13,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import Base, engine, get_db
-from .models import CandidateProfile, Contact, Lead, Opportunity
+from .models import CandidateDocument, CandidateProfile, Contact, Lead, Opportunity
 from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadOut, LeadStageUpdate, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
 from .scoring import build_ats_result, score_lead, score_opportunity
 
@@ -142,6 +150,90 @@ def save_profile(payload: ProfilePayload, db: Session = Depends(get_db)):
         opportunity.score, opportunity.score_details = score_opportunity(opportunity, profile)
     db.commit()
     return profile
+
+
+def extract_docx_text(content: bytes) -> str:
+    try:
+        with zipfile.ZipFile(BytesIO(content)) as archive:
+            xml = archive.read("word/document.xml")
+    except (zipfile.BadZipFile, KeyError) as exc:
+        raise HTTPException(400, "Le fichier fourni n'est pas un document Word .docx valide") from exc
+    root = ElementTree.fromstring(xml)
+    namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    paragraphs = []
+    for paragraph in root.iter(f"{namespace}p"):
+        text = "".join(node.text or "" for node in paragraph.iter(f"{namespace}t")).strip()
+        if text:
+            paragraphs.append(text)
+    return "\n".join(paragraphs)
+
+
+@app.get("/api/profile/cv")
+def get_base_cv(db: Session = Depends(get_db)):
+    document = db.scalar(select(CandidateDocument).order_by(CandidateDocument.uploaded_at.desc()).limit(1))
+    if not document:
+        return {"available": False}
+    return {"available": True, "filename": document.filename, "size": len(document.content), "uploaded_at": document.uploaded_at}
+
+
+@app.post("/api/profile/cv")
+async def upload_base_cv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    filename = Path(file.filename or "cv.docx").name
+    if not filename.lower().endswith(".docx"):
+        raise HTTPException(400, "Choisis un document Word au format .docx")
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(413, "Le CV dépasse la taille maximale de 5 Mo")
+    cv_text = extract_docx_text(content)
+    if not cv_text:
+        raise HTTPException(400, "Le document Word ne contient aucun texte exploitable")
+    db.query(CandidateDocument).delete()
+    document = CandidateDocument(filename=filename, content_type=file.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sha256=sha256(content).hexdigest(), content=content)
+    db.add(document)
+    profile = db.scalar(select(CandidateProfile).limit(1)) or CandidateProfile()
+    profile.cv_text = cv_text
+    db.add(profile)
+    db.commit()
+    db.refresh(document)
+    return {"available": True, "filename": document.filename, "size": len(document.content), "uploaded_at": document.uploaded_at}
+
+
+def current_document(db: Session) -> CandidateDocument:
+    document = db.scalar(select(CandidateDocument).order_by(CandidateDocument.uploaded_at.desc()).limit(1))
+    if not document:
+        raise HTTPException(404, "Ajoute d'abord un CV Word de référence")
+    return document
+
+
+@app.get("/api/profile/cv/word")
+def download_base_cv(db: Session = Depends(get_db)):
+    document = current_document(db)
+    return Response(content=document.content, media_type=document.content_type, headers={"Content-Disposition": f'attachment; filename="{document.filename}"'})
+
+
+@app.get("/api/profile/cv/pdf")
+def download_base_cv_pdf(db: Session = Depends(get_db)):
+    document = current_document(db)
+    converter = shutil.which("libreoffice") or shutil.which("soffice")
+    if not converter:
+        raise HTTPException(503, "Le convertisseur PDF n'est pas disponible sur le serveur")
+    with TemporaryDirectory(prefix="missionflow-cv-") as directory:
+        source = Path(directory) / "cv.docx"
+        source.write_bytes(document.content)
+        profile_uri = (Path(directory) / "libreoffice-profile").as_uri()
+        result = subprocess.run(
+            [converter, f"-env:UserInstallation={profile_uri}", "--headless", "--convert-to", "pdf", "--outdir", directory, str(source)],
+            capture_output=True,
+            timeout=45,
+            check=False,
+            env={**os.environ, "HOME": directory},
+        )
+        pdf_path = Path(directory) / "cv.pdf"
+        if result.returncode or not pdf_path.exists():
+            raise HTTPException(500, "La génération du PDF a échoué")
+        pdf = pdf_path.read_bytes()
+    output_name = f"{Path(document.filename).stem}.pdf"
+    return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{output_name}"'})
 
 
 @app.post("/api/contacts")

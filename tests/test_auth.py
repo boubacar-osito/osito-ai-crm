@@ -1,6 +1,17 @@
+from io import BytesIO
+from types import SimpleNamespace
+from zipfile import ZipFile
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+
+
+def sample_docx() -> bytes:
+    stream = BytesIO()
+    with ZipFile(stream, "w") as archive:
+        archive.writestr("word/document.xml", '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Architecte Salesforce senior</w:t></w:r></w:p></w:body></w:document>')
+    return stream.getvalue()
 
 
 def test_health_is_public():
@@ -96,3 +107,34 @@ def test_coach_keeps_cv_referral_contact_to_reactivate():
         assert response.status_code == 200
         assert response.json()["suggested_stage"] == "a_reactiver"
         assert "transmets volontiers mon CV" in response.json()["suggested_message"]
+
+
+def test_authenticated_user_can_store_and_download_base_cv():
+    content = sample_docx()
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        uploaded = client.post("/api/profile/cv", files={"file": ("CV Boubacar.docx", content, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+        assert uploaded.status_code == 200
+        assert uploaded.json()["filename"] == "CV Boubacar.docx"
+        assert client.get("/api/profile").json()["cv_text"] == "Architecte Salesforce senior"
+        downloaded = client.get("/api/profile/cv/word")
+        assert downloaded.status_code == 200
+        assert downloaded.content == content
+
+
+def test_pdf_is_generated_from_stored_word(monkeypatch):
+    def fake_run(args, **_kwargs):
+        output_dir = args[args.index("--outdir") + 1]
+        from pathlib import Path
+        Path(output_dir, "cv.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("app.main.shutil.which", lambda _name: "/usr/bin/libreoffice")
+    monkeypatch.setattr("app.main.subprocess.run", fake_run)
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        client.post("/api/profile/cv", files={"file": ("CV Boubacar.docx", sample_docx(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+        response = client.get("/api/profile/cv/pdf")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.content.startswith(b"%PDF")
