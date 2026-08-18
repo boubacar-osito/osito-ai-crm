@@ -77,3 +77,28 @@ def test_curly_apostrophe_is_normalized():
     )
     score, _ = score_lead(lead)
     assert score == 90
+
+
+def test_it_recruitment_firm_leader_scores_high():
+    lead = SimpleNamespace(
+        headline="Spécialiste RH & Digital Transformation | Fondatrice 4N4 Consulting | Directrice générale BeyondTech Agency",
+        company="BeyondTech Agency",
+        notes="",
+        connected_on=date(2026, 8, 18),
+    )
+    score, details = score_lead(lead)
+    assert score >= 85
+    assert details["priorite"] == "haute"
+    assert details["acces_aux_missions"]["points"] == 25
+
+
+def test_generalist_hr_profile_without_it_stays_low():
+    lead = SimpleNamespace(
+        headline="Responsable ressources humaines",
+        company="Enseigne de grande distribution",
+        notes="",
+        connected_on=date(2026, 8, 18),
+    )
+    score, details = score_lead(lead)
+    assert score < 50
+    assert details["priorite"] == "faible"
