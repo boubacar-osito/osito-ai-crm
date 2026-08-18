@@ -61,6 +61,8 @@ Les nouvelles connexions LinkedIn sont enregistrées avec leur date de connexion
 
 Pipeline initial : `nouvelle`, puis `à contacter`, `message envoyé`, `échange en cours`, `mission détectée`, `à réactiver` ou `hors cible`.
 
+Chaque fiche expose un sélecteur d'étape. Après modification, l'API persiste le nouvel état et l'interface recharge les pistes. Les indicateurs de l'onglet affichent alors les pistes actives, les priorités hautes, les contacts restant à traiter et les processus déjà engagés.
+
 ## Adaptation ATS
 
 ```mermaid
