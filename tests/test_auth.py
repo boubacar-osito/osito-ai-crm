@@ -39,3 +39,30 @@ def test_google_login_requires_configuration():
         response = client.get("/auth/google", follow_redirects=False)
         assert response.status_code == 303
         assert response.headers["location"] == "/login?oauth=unavailable"
+
+
+def test_authenticated_user_can_advance_a_lead():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        created = client.post(
+            "/api/leads",
+            json={
+                "name": "Lead Test",
+                "headline": "Business Manager IT",
+                "company": "ESN Test",
+                "linkedin_url": "https://www.linkedin.com/in/missionflow-test/",
+                "connected_on": "2026-08-18",
+            },
+        )
+        assert created.status_code == 200
+        lead_id = created.json()["id"]
+        updated = client.patch(f"/api/leads/{lead_id}/stage", json={"stage": "message_envoye"})
+        assert updated.status_code == 200
+        assert updated.json()["stage"] == "message_envoye"
+
+
+def test_invalid_lead_stage_is_rejected():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        response = client.patch("/api/leads/1/stage", json={"stage": "nimporte_quoi"})
+        assert response.status_code == 422

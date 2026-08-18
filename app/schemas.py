@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
@@ -89,4 +90,4 @@ class LeadOut(LeadCreate):
 
 
 class LeadStageUpdate(BaseModel):
-    stage: str
+    stage: Literal["nouvelle", "a_contacter", "message_envoye", "echange_en_cours", "mission_detectee", "a_reactiver", "hors_cible"]
