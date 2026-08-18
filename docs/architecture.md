@@ -8,7 +8,7 @@ MissionFlow est le CRM personnel d'OSITO consacré à la recherche de missions S
 
 ```mermaid
 flowchart LR
-    Phone["Téléphone ou ordinateur"] -->|"HTTPS"| DNS["crm.osito-solution.tech"]
+    Phone["Téléphone ou ordinateur"] -->|"HTTPS"| DNS["crm.osito-solution.com"]
     DNS --> Proxy["Traefik"]
     Proxy --> CRM["MissionFlow / FastAPI"]
     CRM --> DB[("PostgreSQL / osito_crm")]
@@ -36,7 +36,7 @@ L'application utilise le flux OpenID Connect côté serveur avec les seuls scope
 URI de redirection de production :
 
 ```text
-https://crm.osito-solution.tech/auth/google/callback
+https://crm.osito-solution.com/auth/google/callback
 ```
 
 Le `GOOGLE_CLIENT_SECRET` reste exclusivement dans `/opt/osito-crm/.env` sur le VPS. Il ne doit jamais être ajouté à GitHub.
@@ -127,4 +127,3 @@ Le déploiement doit suivre cet ordre : sauvegarde, récupération Git en avance
 - Journaux applicatifs accessibles avec `docker logs osito-crm`.
 - État applicatif avec `docker inspect osito-crm` et `/api/health`.
 - Rotation périodique du secret de session et du secret OAuth.
-
