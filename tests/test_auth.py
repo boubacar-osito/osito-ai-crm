@@ -88,6 +88,17 @@ def test_invalid_lead_stage_is_rejected():
         assert response.status_code == 422
 
 
+def test_opportunity_coach_prepares_direct_application_message():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        mission = client.post("/api/opportunities", json={"title": "Expert Salesforce", "company": "NaxoTech", "description": "Architecture Salesforce et gouvernance", "source_url": "https://www.linkedin.com/company/naxotech/posts/"}).json()
+        response = client.post(f"/api/opportunities/{mission['id']}/coach")
+        assert response.status_code == 200
+        assert response.json()["suggested_stage"] == "contact"
+        assert "publication concernant la mission Expert Salesforce" in response.json()["suggested_message"]
+        assert "CV ciblé" in response.json()["suggested_message"]
+
+
 def test_coach_recommends_first_message_for_lead_to_contact():
     with TestClient(app) as client:
         client.post("/login", data={"username": "admin", "password": "development-only"})
