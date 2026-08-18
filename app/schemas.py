@@ -91,3 +91,15 @@ class LeadOut(LeadCreate):
 
 class LeadStageUpdate(BaseModel):
     stage: Literal["nouvelle", "a_contacter", "message_envoye", "echange_en_cours", "mission_detectee", "a_reactiver", "hors_cible"]
+
+
+class LeadCoachRequest(BaseModel):
+    latest_message: str = ""
+
+
+class LeadCoachResult(BaseModel):
+    situation: str
+    objective: str
+    next_action: str
+    suggested_stage: Literal["nouvelle", "a_contacter", "message_envoye", "echange_en_cours", "mission_detectee", "a_reactiver", "hors_cible"]
+    suggested_message: str
