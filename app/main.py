@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, engine, get_db
 from .models import CandidateProfile, Contact, Lead, Opportunity
-from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCreate, LeadOut, LeadStageUpdate, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
+from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadOut, LeadStageUpdate, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
 from .scoring import build_ats_result, score_lead, score_opportunity
 
 
@@ -180,6 +180,42 @@ def update_lead_stage(lead_id: int, payload: LeadStageUpdate, db: Session = Depe
     db.commit()
     db.refresh(lead)
     return lead
+
+
+@app.post("/api/leads/{lead_id}/coach", response_model=LeadCoachResult)
+def coach_lead(lead_id: int, payload: LeadCoachRequest, db: Session = Depends(get_db)):
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Piste introuvable")
+    first_name = lead.name.split()[0]
+    message = payload.latest_message.strip()
+    normalized = message.lower()
+
+    if message and any(term in normalized for term in ("pas de mission", "aucune mission", "n'ai pas de mission", "n’ai pas de mission")):
+        if any(term in normalized for term in ("cv", "gardons contact", "mettrez en relation", "mettrai en relation")):
+            return LeadCoachResult(
+                situation="Pas de besoin immédiat, mais le contact accepte de devenir prescripteur.",
+                objective="Envoyer le CV et obtenir l'autorisation de revenir vers ce contact.",
+                next_action="Joindre le CV ciblé Architecte CRM/Salesforce, puis programmer une relance dans 4 à 6 semaines.",
+                suggested_stage="a_reactiver",
+                suggested_message=f"Bonjour {first_name}, merci pour votre retour et pour votre proposition. Je vous transmets volontiers mon CV. Mon positionnement : Architecte CRM/Solution senior, spécialisé Salesforce et transformation SI, disponible en freelance. Si l’un de vos partenaires recherche ce type de profil, je serai ravi d’échanger rapidement avec lui. Je garde également vos coordonnées pour le portage salarial et reviendrai vers vous si le sujet se concrétise. Belle journée !",
+            )
+        return LeadCoachResult(
+            situation="Le contact n'a pas de mission disponible actuellement.", objective="Rester dans son radar sans insister.",
+            next_action="Remercier et programmer une relance dans 4 à 6 semaines.", suggested_stage="a_reactiver",
+            suggested_message=f"Bonjour {first_name}, merci pour votre transparence. Je reste disponible pour toute mission d’architecture CRM/Salesforce ou de transformation SI qui pourrait se présenter dans votre réseau. Gardons le contact et belle journée !",
+        )
+    if message:
+        return LeadCoachResult(
+            situation="Le contact a répondu : la conversation est engagée.", objective="Qualifier l'existence d'un besoin, son calendrier et le décideur.",
+            next_action="Répondre en proposant un échange de 15 minutes et demander les besoins prioritaires.", suggested_stage="echange_en_cours",
+            suggested_message=f"Bonjour {first_name}, merci pour votre retour. Pour voir rapidement si mon profil peut répondre à l’un de vos besoins, seriez-vous disponible pour un échange de 15 minutes cette semaine ? Je pourrai vous présenter mes expériences récentes en architecture CRM/Salesforce et comprendre vos priorités actuelles ou à venir.",
+        )
+    return LeadCoachResult(
+        situation="Premier message envoyé, sans réponse pour le moment.", objective="Obtenir une réponse en apportant un élément concret et facile à qualifier.",
+        next_action="Relancer 4 à 5 jours ouvrés après le premier message. Ne pas renvoyer une présentation générale.", suggested_stage="message_envoye",
+        suggested_message=f"Bonjour {first_name}, je me permets une courte relance. J’interviens sur des missions d’architecture CRM/Salesforce, notamment sur le cadrage, la conception de solutions et l’alignement métier–SI. Avez-vous actuellement, ou prochainement, un besoin sur lequel ce positionnement pourrait être pertinent ? Je peux vous transmettre mon CV ciblé et mes disponibilités si utile.",
+    )
 
 
 @app.get("/api/opportunities", response_model=list[OpportunityOut])

@@ -66,3 +66,23 @@ def test_invalid_lead_stage_is_rejected():
         client.post("/login", data={"username": "admin", "password": "development-only"})
         response = client.patch("/api/leads/1/stage", json={"stage": "nimporte_quoi"})
         assert response.status_code == 422
+
+
+def test_coach_recommends_follow_up_when_there_is_no_reply():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        lead = client.post("/api/leads", json={"name": "Andrei Furtos", "linkedin_url": "https://www.linkedin.com/in/andrei-coach-test/"}).json()
+        response = client.post(f"/api/leads/{lead['id']}/coach", json={"latest_message": ""})
+        assert response.status_code == 200
+        assert response.json()["suggested_stage"] == "message_envoye"
+        assert "courte relance" in response.json()["suggested_message"]
+
+
+def test_coach_keeps_cv_referral_contact_to_reactivate():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        lead = client.post("/api/leads", json={"name": "Elodie Gabilly", "linkedin_url": "https://www.linkedin.com/in/elodie-coach-test/"}).json()
+        response = client.post(f"/api/leads/{lead['id']}/coach", json={"latest_message": "Je n'ai pas de mission, mais transmettez-moi votre CV et gardons contact."})
+        assert response.status_code == 200
+        assert response.json()["suggested_stage"] == "a_reactiver"
+        assert "transmets volontiers mon CV" in response.json()["suggested_message"]

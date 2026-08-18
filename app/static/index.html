@@ -11,22 +11,22 @@
   <aside>
     <div class="brand"><span>MF</span><strong>MissionFlow</strong></div>
     <nav>
-      <button class="nav active" data-view="pipeline">⌁ <span>Pipeline</span></button>
-      <button class="nav" data-view="opportunities">◇ <span>Missions</span></button>
-      <button class="nav" data-view="leads">◉ <span>Pistes</span></button>
+      <button class="nav active" data-view="leads">◉ <span>Pistes à convertir</span></button>
+      <button class="nav" data-view="opportunities">◇ <span>Missions détectées</span></button>
+      <button class="nav" data-view="pipeline">⌁ <span>Pipeline missions</span></button>
       <button class="nav" data-view="profile">◎ <span>Mon profil & CV</span></button>
     </nav>
     <div class="aside-note"><b>Objectif</b><br>Transformer les bons signaux en mission Salesforce.</div>
   </aside>
   <main>
     <header>
-      <div><p class="eyebrow">TABLEAU DE BORD</p><h1 id="page-title">Pipeline de missions</h1></div>
+      <div><p class="eyebrow">TABLEAU DE BORD</p><h1 id="page-title">Pistes à convertir</h1></div>
       <button class="primary" id="open-modal">+ Ajouter une mission</button>
     </header>
     <section id="stats" class="stats"></section>
-    <section id="pipeline-view" class="view"><div id="kanban" class="kanban"></div></section>
+    <section id="pipeline-view" class="view hidden"><div id="kanban" class="kanban"></div></section>
     <section id="opportunities-view" class="view hidden"><div id="mission-list" class="mission-list"></div></section>
-    <section id="leads-view" class="view hidden"><div id="lead-list" class="mission-list"></div></section>
+    <section id="leads-view" class="view"><div class="panel lead-intro"><b>Votre priorité aujourd’hui</b><span>Faites avancer une piste grâce à la prochaine action et au message recommandé.</span></div><div id="lead-list" class="mission-list"></div></section>
     <section id="profile-view" class="view hidden">
       <form id="profile-form" class="panel profile-grid">
         <div class="full"><p class="eyebrow">PROFIL DE RÉFÉRENCE</p><h2>Ce qui rend une mission pertinente</h2><p class="muted">Ces informations alimentent le score et l'analyse ATS.</p></div>
@@ -56,6 +56,7 @@
   </dialog>
 
   <dialog id="ats-modal"><div id="ats-content"></div></dialog>
+  <dialog id="coach-modal"><div id="coach-content"></div></dialog>
   <div id="toast"></div>
   <script src="/static/app.js"></script>
 </body>
