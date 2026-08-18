@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
@@ -67,3 +67,26 @@ class ATSResult(BaseModel):
     reordered_skills: list[str]
     warnings: list[str]
 
+
+class LeadCreate(BaseModel):
+    name: str
+    headline: str = ""
+    company: str = ""
+    linkedin_url: str
+    connected_on: date | None = None
+    source: str = "LinkedIn / Waalaxy"
+    stage: str = "nouvelle"
+    notes: str = ""
+
+
+class LeadOut(LeadCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    score: int
+    score_details: dict
+    created_at: datetime
+    updated_at: datetime
+
+
+class LeadStageUpdate(BaseModel):
+    stage: str

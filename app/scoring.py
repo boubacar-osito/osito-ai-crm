@@ -86,3 +86,29 @@ def build_ats_result(opportunity, profile) -> dict:
         ],
     }
 
+
+def score_lead(lead) -> tuple[int, dict]:
+    text = normalize(f"{lead.headline} {lead.company} {lead.notes}")
+    commercial_terms = ("ingenieur d'affaire", "charge d'affaire", "account manager", "business manager", "business developer")
+    crm_terms = ("salesforce", "crm", "erp crm", "practice salesforce")
+    it_terms = (" it ", "esn", "digital", "tech", "informatique", "davidson", "sariel", "guarani", "profila")
+    access_terms = ("portage", "freelance", "recrutement", "staffing", "ingenieur d'affaire", "business manager", "charge d'affaire")
+
+    role_matches = [term for term in commercial_terms if normalize(term) in text]
+    crm_matches = [term for term in crm_terms if normalize(term) in text]
+    it_matches = [term for term in it_terms if normalize(term) in text]
+    access_matches = [term for term in access_terms if normalize(term) in text]
+
+    role_points = 30 if role_matches else (20 if "responsable fonctionnel" in text else 0)
+    ecosystem_points = 30 if crm_matches else (25 if it_matches else (15 if "openwork" in text or "experconnect" in text else 0))
+    access_points = 25 if access_matches else (20 if crm_matches and "responsable" in text else 0)
+    recency_points = 10 if lead.connected_on else 0
+    score = min(100, role_points + ecosystem_points + access_points + recency_points)
+    priority = "haute" if score >= 75 else ("moyenne" if score >= 50 else "faible")
+    return score, {
+        "priorite": priority,
+        "role_commercial": {"points": role_points, "matches": role_matches},
+        "ecosysteme_it_crm": {"points": ecosystem_points, "matches": sorted(set(crm_matches + it_matches))},
+        "acces_aux_missions": {"points": access_points, "matches": access_matches},
+        "connexion_recente": {"points": recency_points},
+    }

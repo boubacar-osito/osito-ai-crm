@@ -7,6 +7,7 @@ Production prévue sur `https://crm.osito-solution.com`, avec authentification G
 ## Ce que couvre la V1
 
 - pipeline Kanban des missions ;
+- pipeline de pistes LinkedIn avec import dédupliqué et score explicable ;
 - score de compatibilité explicable sur 100 ;
 - profil candidat de référence (compétences, rôles, localisation, TJM) ;
 - analyse ATS et résumé adapté, sans ajout de compétence non démontrée ;
