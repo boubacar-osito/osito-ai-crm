@@ -68,13 +68,23 @@ def test_invalid_lead_stage_is_rejected():
         assert response.status_code == 422
 
 
-def test_coach_recommends_follow_up_when_there_is_no_reply():
+def test_coach_recommends_first_message_for_lead_to_contact():
     with TestClient(app) as client:
         client.post("/login", data={"username": "admin", "password": "development-only"})
-        lead = client.post("/api/leads", json={"name": "Andrei Furtos", "linkedin_url": "https://www.linkedin.com/in/andrei-coach-test/"}).json()
+        lead = client.post("/api/leads", json={"name": "Antoine Driguet", "company": "Profila France", "stage": "a_contacter", "linkedin_url": "https://www.linkedin.com/in/antoine-coach-test/"}).json()
         response = client.post(f"/api/leads/{lead['id']}/coach", json={"latest_message": ""})
         assert response.status_code == 200
         assert response.json()["suggested_stage"] == "message_envoye"
+        assert "m’amène à vous contacter" in response.json()["suggested_message"]
+        assert "relance" not in response.json()["suggested_message"]
+
+
+def test_coach_recommends_follow_up_after_message_was_sent():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        lead = client.post("/api/leads", json={"name": "Andrei Furtos", "stage": "message_envoye", "linkedin_url": "https://www.linkedin.com/in/andrei-follow-up-test/"}).json()
+        response = client.post(f"/api/leads/{lead['id']}/coach", json={"latest_message": ""})
+        assert response.status_code == 200
         assert "courte relance" in response.json()["suggested_message"]
 
 

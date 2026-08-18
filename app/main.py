@@ -211,9 +211,38 @@ def coach_lead(lead_id: int, payload: LeadCoachRequest, db: Session = Depends(ge
             next_action="Répondre en proposant un échange de 15 minutes et demander les besoins prioritaires.", suggested_stage="echange_en_cours",
             suggested_message=f"Bonjour {first_name}, merci pour votre retour. Pour voir rapidement si mon profil peut répondre à l’un de vos besoins, seriez-vous disponible pour un échange de 15 minutes cette semaine ? Je pourrai vous présenter mes expériences récentes en architecture CRM/Salesforce et comprendre vos priorités actuelles ou à venir.",
         )
+
+    if lead.stage in ("nouvelle", "a_contacter"):
+        company_context = f" chez {lead.company}" if lead.company else ""
+        return LeadCoachResult(
+            situation="Cette piste est qualifiée, mais aucun premier message n'a encore été envoyé.",
+            objective="Démarrer une conversation et vérifier si le contact traite des besoins correspondant au profil.",
+            next_action="Envoyer ce premier message maintenant, puis classer la piste en « Message envoyé ».",
+            suggested_stage="message_envoye",
+            suggested_message=f"Bonjour {first_name}, je suis Architecte CRM/Solution senior, spécialisé Salesforce et transformation SI, et actuellement disponible pour une mission freelance. Votre activité{company_context} m’amène à vous contacter : accompagnez-vous actuellement des clients ayant des besoins en architecture Salesforce, cadrage CRM ou transformation SI ? Je peux vous transmettre mon CV et mes disponibilités si mon profil peut correspondre à l’un de vos besoins actuels ou à venir.",
+        )
+
+    if lead.stage == "a_reactiver":
+        return LeadCoachResult(
+            situation="Le contact est connu, mais la conversation doit être réactivée.",
+            objective="Revenir dans son radar avec une disponibilité et un positionnement précis.",
+            next_action="Envoyer une reprise de contact contextualisée, sans présenter le message comme une première approche.",
+            suggested_stage="message_envoye",
+            suggested_message=f"Bonjour {first_name}, je me permets de reprendre contact. Je suis actuellement disponible pour une mission freelance d’architecture CRM/Salesforce ou de transformation SI. Avez-vous identifié récemment un besoin correspondant dans votre réseau ou auprès de vos clients ? Je peux vous transmettre mon CV actualisé et mes disponibilités.",
+        )
+
+    if lead.stage == "echange_en_cours":
+        return LeadCoachResult(
+            situation="La conversation est engagée, mais sa dernière réponse manque pour préparer une réponse pertinente.",
+            objective="Répondre au contenu réel de l'échange.",
+            next_action="Coller le dernier message reçu dans le champ ci-dessus, puis relancer l'analyse.",
+            suggested_stage="echange_en_cours",
+            suggested_message="Collez d’abord la dernière réponse reçue afin de générer un message adapté sans inventer le contexte.",
+        )
+
     return LeadCoachResult(
         situation="Premier message envoyé, sans réponse pour le moment.", objective="Obtenir une réponse en apportant un élément concret et facile à qualifier.",
-        next_action="Relancer 4 à 5 jours ouvrés après le premier message. Ne pas renvoyer une présentation générale.", suggested_stage="message_envoye",
+        next_action="Relancer 3 jours ouvrés après le premier message. Ne pas renvoyer une présentation générale.", suggested_stage="message_envoye",
         suggested_message=f"Bonjour {first_name}, je me permets une courte relance. J’interviens sur des missions d’architecture CRM/Salesforce, notamment sur le cadrage, la conception de solutions et l’alignement métier–SI. Avez-vous actuellement, ou prochainement, un besoin sur lequel ce positionnement pourrait être pertinent ? Je peux vous transmettre mon CV ciblé et mes disponibilités si utile.",
     )
 
