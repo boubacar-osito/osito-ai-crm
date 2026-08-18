@@ -55,3 +55,25 @@ def test_non_commercial_profile_scores_low():
     score, details = score_lead(lead)
     assert score < 50
     assert details["priorite"] == "faible"
+
+
+def test_uncertain_note_does_not_inflate_score():
+    lead = SimpleNamespace(
+        headline="Ingénieur d'affaire",
+        company="Ingetis",
+        notes="Accès aux missions IT à confirmer",
+        connected_on=date(2026, 8, 17),
+    )
+    score, _ = score_lead(lead)
+    assert score == 65
+
+
+def test_curly_apostrophe_is_normalized():
+    lead = SimpleNamespace(
+        headline="Ingénieur d’affaire chez Guarani",
+        company="GUARANÍ",
+        notes="",
+        connected_on=date(2026, 8, 18),
+    )
+    score, _ = score_lead(lead)
+    assert score == 90
