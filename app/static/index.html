@@ -27,7 +27,12 @@
     <section id="stats" class="stats"></section>
     <section id="pipeline-view" class="view hidden"><div id="kanban" class="kanban"></div></section>
     <section id="opportunities-view" class="view hidden"><div id="mission-list" class="mission-list"></div></section>
-    <section id="leads-view" class="view"><div class="panel lead-intro"><b>Votre priorité aujourd’hui</b><span>Faites avancer une piste grâce à la prochaine action et au message recommandé.</span></div><div id="lead-list" class="mission-list"></div></section>
+    <section id="leads-view" class="view">
+      <div class="panel lead-intro"><div><b>Votre priorité aujourd’hui</b><span>Faites avancer une piste grâce à la prochaine action et au message recommandé.</span></div><div class="lead-view-switch" role="group" aria-label="Affichage des pistes"><button class="view-toggle active" data-lead-layout="kanban">Kanban</button><button class="view-toggle" data-lead-layout="list">Liste</button></div></div>
+      <div class="lead-filters"><label>Rechercher<input id="lead-search" type="search" placeholder="Nom, entreprise ou fonction"></label><label>Priorité<select id="lead-priority"><option value="all">Toutes</option><option value="high">Haute — 75 et plus</option><option value="medium">Moyenne — 50 à 74</option><option value="low">Faible — moins de 50</option></select></label></div>
+      <div id="lead-kanban" class="lead-kanban"></div>
+      <div id="lead-list" class="mission-list hidden"></div>
+    </section>
     <section id="profile-view" class="view hidden">
       <form id="profile-form" class="panel profile-grid">
         <div class="full"><p class="eyebrow">PROFIL DE RÉFÉRENCE</p><h2>Ce qui rend une mission pertinente</h2><p class="muted">Ces informations alimentent le score et l'analyse ATS.</p></div>
