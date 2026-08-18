@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import Base, engine, get_db
-from .models import CandidateProfile, Contact, Opportunity
-from .schemas import ATSRequest, ATSResult, ContactCreate, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
-from .scoring import build_ats_result, score_opportunity
+from .models import CandidateProfile, Contact, Lead, Opportunity
+from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCreate, LeadOut, LeadStageUpdate, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
+from .scoring import build_ats_result, score_lead, score_opportunity
 
 
 @asynccontextmanager
@@ -151,6 +151,35 @@ def create_contact(payload: ContactCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(contact)
     return contact
+
+
+@app.get("/api/leads", response_model=list[LeadOut])
+def list_leads(db: Session = Depends(get_db)):
+    return db.scalars(select(Lead).order_by(Lead.score.desc(), Lead.connected_on.desc())).all()
+
+
+@app.post("/api/leads", response_model=LeadOut)
+def create_lead(payload: LeadCreate, db: Session = Depends(get_db)):
+    existing = db.scalar(select(Lead).where(Lead.linkedin_url == payload.linkedin_url))
+    lead = existing or Lead()
+    for key, value in payload.model_dump().items():
+        setattr(lead, key, value)
+    lead.score, lead.score_details = score_lead(lead)
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    return lead
+
+
+@app.patch("/api/leads/{lead_id}/stage", response_model=LeadOut)
+def update_lead_stage(lead_id: int, payload: LeadStageUpdate, db: Session = Depends(get_db)):
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Piste introuvable")
+    lead.stage = payload.stage
+    db.commit()
+    db.refresh(lead)
+    return lead
 
 
 @app.get("/api/opportunities", response_model=list[OpportunityOut])

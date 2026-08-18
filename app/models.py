@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -31,6 +31,23 @@ class Contact(Base):
     email: Mapped[str] = mapped_column(String(240), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Lead(Base):
+    __tablename__ = "leads"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    headline: Mapped[str] = mapped_column(String(300), default="")
+    company: Mapped[str] = mapped_column(String(180), default="")
+    linkedin_url: Mapped[str] = mapped_column(String(500), unique=True, index=True)
+    connected_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(80), default="LinkedIn / Waalaxy")
+    stage: Mapped[str] = mapped_column(String(60), default="nouvelle")
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    score_details: Mapped[dict] = mapped_column(JSON, default=dict)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Opportunity(Base):
@@ -68,4 +85,3 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(240))
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-

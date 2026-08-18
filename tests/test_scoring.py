@@ -1,5 +1,7 @@
 from types import SimpleNamespace
-from app.scoring import build_ats_result, score_opportunity
+from datetime import date
+
+from app.scoring import build_ats_result, score_lead, score_opportunity
 
 
 def profile(**kwargs):
@@ -30,3 +32,26 @@ def test_ats_never_adds_missing_skills_to_summary():
     assert "cpq" in result["missing_keywords"]
     assert "cpq" not in result["tailored_summary"].lower()
 
+
+def test_it_business_lead_scores_high():
+    lead = SimpleNamespace(
+        headline="Ingénieur d'affaires chez SARIEL",
+        company="SARIEL",
+        notes="ESN IT",
+        connected_on=date(2026, 8, 18),
+    )
+    score, details = score_lead(lead)
+    assert score >= 80
+    assert details["priorite"] == "haute"
+
+
+def test_non_commercial_profile_scores_low():
+    lead = SimpleNamespace(
+        headline="Ingénieur d'exploitation télécom",
+        company="COVAGE",
+        notes="réseaux télécom",
+        connected_on=date(2026, 8, 17),
+    )
+    score, details = score_lead(lead)
+    assert score < 50
+    assert details["priorite"] == "faible"

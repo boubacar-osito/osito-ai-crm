@@ -24,7 +24,7 @@ Tous les conteneurs communiquent sur le réseau Docker privé `osito-net`. Seuls
 | Composant | Responsabilité |
 |---|---|
 | Traefik | Terminaison TLS, certificat Let's Encrypt, routage et en-têtes de sécurité |
-| MissionFlow | Interface responsive, API, pipeline, scoring et analyse ATS |
+| MissionFlow | Interface responsive, API, pipeline de pistes et missions, scoring et analyse ATS |
 | PostgreSQL | Persistance des profils, contacts, missions, interactions et tâches |
 | Google OIDC | Authentification, adresse autorisée et identité vérifiée |
 | n8n | Imports, rappels, notifications et orchestration future |
@@ -54,6 +54,12 @@ Le score sur 100 reste explicable :
 | Compatibilité avec le TJM minimum | 10 |
 
 Le détail est stocké en JSON avec la mission. Une modification du profil recalcule toutes les opportunités.
+
+## Scoring des pistes
+
+Les nouvelles connexions LinkedIn sont enregistrées avec leur date de connexion, intitulé, entreprise, URL et source. Le score mesure leur capacité probable à ouvrir l'accès à une mission : fonction commerciale (30 points), écosystème IT/CRM (30), accès aux missions ou au staffing (25) et récence de la connexion (10). Le score sert à prioriser les actions ; il ne constitue pas une certitude sur la personne.
+
+Pipeline initial : `nouvelle`, puis `à contacter`, `message envoyé`, `échange en cours`, `mission détectée`, `à réactiver` ou `hors cible`.
 
 ## Adaptation ATS
 
@@ -89,6 +95,16 @@ erDiagram
       string name
       string company
       string linkedin_url
+    }
+    LEAD {
+      int id PK
+      string name
+      string headline
+      string linkedin_url UK
+      date connected_on
+      string stage
+      int score
+      json score_details
     }
     OPPORTUNITY {
       int id PK
