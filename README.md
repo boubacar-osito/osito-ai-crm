@@ -2,7 +2,7 @@
 
 Mini-CRM personnel pour transformer des opportunités Salesforce en mission contractualisée.
 
-Production prévue sur `https://crm.osito-solution.tech`, avec authentification Google OAuth et accès mobile.
+Production prévue sur `https://crm.osito-solution.com`, avec authentification Google OAuth et accès mobile.
 
 ## Ce que couvre la V1
 
