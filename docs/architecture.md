@@ -63,7 +63,7 @@ Pipeline initial : `nouvelle`, puis `à contacter`, `message envoyé`, `échange
 
 Chaque fiche expose un sélecteur d'étape. Après modification, l'API persiste le nouvel état et l'interface recharge les pistes. Les indicateurs de l'onglet affichent alors les pistes actives, les priorités hautes, les contacts restant à traiter et les processus déjà engagés.
 
-L'écran s'ouvre sur les pistes à convertir, avant les missions détectées et leur pipeline. Le bouton **Que lui envoyer ?** analyse la dernière réponse collée par l'utilisateur — ou l'absence de réponse — puis propose une lecture de la situation, un objectif, une prochaine action, un message personnalisable et le statut recommandé. Un refus temporaire accompagné d'une demande de CV est classé **à réactiver**, car le contact reste un prescripteur potentiel.
+L'écran s'ouvre sur les pistes à convertir, avant les missions détectées et leur pipeline. L'action est nommée selon l'étape : **Préparer le premier message**, **Préparer une relance**, **Préparer la réponse** ou **Reprendre contact**. Le moteur combine le statut et la dernière réponse collée pour proposer une lecture de la situation, un objectif, une prochaine action, un message personnalisable et le statut recommandé. Une piste **à contacter** ne reçoit jamais un texte de relance ; un refus temporaire accompagné d'une demande de CV est classé **à réactiver**, car le contact reste un prescripteur potentiel.
 
 ## Adaptation ATS
 
