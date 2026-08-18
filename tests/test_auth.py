@@ -27,6 +27,15 @@ def test_home_redirects_to_login():
         assert response.headers["location"] == "/login"
 
 
+def test_authenticated_home_contains_lead_kanban():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        response = client.get("/")
+        assert response.status_code == 200
+        assert 'id="lead-kanban"' in response.text
+        assert 'data-lead-layout="kanban"' in response.text
+
+
 def test_api_rejects_unauthenticated_requests():
     with TestClient(app) as client:
         response = client.get("/api/opportunities")
