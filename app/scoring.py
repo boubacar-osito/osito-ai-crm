@@ -10,7 +10,7 @@ SALESFORCE_CORE = {
 
 
 def normalize(value: str) -> str:
-    value = unicodedata.normalize("NFKD", value.lower())
+    value = unicodedata.normalize("NFKD", value.lower().replace("’", "'").replace("‘", "'"))
     return "".join(c for c in value if not unicodedata.combining(c))
 
 
@@ -88,8 +88,10 @@ def build_ats_result(opportunity, profile) -> dict:
 
 
 def score_lead(lead) -> tuple[int, dict]:
-    text = normalize(f"{lead.headline} {lead.company} {lead.notes}")
-    commercial_terms = ("ingenieur d'affaire", "charge d'affaire", "account manager", "business manager", "business developer")
+    # Free-form notes are deliberately excluded: a phrase such as
+    # "IT à confirmer" must not count as positive evidence.
+    text = normalize(f"{lead.headline} {lead.company}")
+    commercial_terms = ("ingenieur d'affaire", "charge d'affaire", "chargee d'affaire", "account manager", "business manager", "business developer")
     crm_terms = ("salesforce", "crm", "erp crm", "practice salesforce")
     it_terms = (" it ", "esn", "digital", "tech", "informatique", "davidson", "sariel", "guarani", "profila")
     access_terms = ("portage", "freelance", "recrutement", "staffing", "ingenieur d'affaire", "business manager", "charge d'affaire")
