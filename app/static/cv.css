@@ -1,0 +1,11 @@
+.cv-reference {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.cv-reference h2 { margin: 0; }
+.cv-upload { max-width: 460px; }
+.cv-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.cv-actions a { text-decoration: none; }
+.cv-actions .text-button { padding: 10px 4px; }

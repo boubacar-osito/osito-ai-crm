@@ -6,6 +6,7 @@
   <title>MissionFlow — CRM de recherche de mission</title>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/leads.css">
+  <link rel="stylesheet" href="/static/cv.css">
 </head>
 <body>
   <aside>
@@ -39,6 +40,11 @@
         <label class="full">Contenu texte du CV<textarea name="cv_text" rows="12" placeholder="Colle ici le texte de ton CV. Aucun contenu ne sera inventé."></textarea></label>
         <div class="full"><button class="primary" type="submit">Enregistrer et recalculer les scores</button></div>
       </form>
+      <section class="panel cv-reference">
+        <div><p class="eyebrow">DOCUMENT MAÎTRE</p><h2>CV Word de référence</h2><p class="muted" id="cv-reference-status">Aucun document Word enregistré.</p></div>
+        <label class="cv-upload">Choisir un CV .docx<input id="cv-file" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
+        <div class="cv-actions"><button class="primary" id="upload-cv" type="button">Enregistrer comme base</button><a class="text-button hidden" id="download-word" href="/api/profile/cv/word">Télécharger le Word</a><a class="primary hidden" id="download-pdf" href="/api/profile/cv/pdf">Générer le PDF</a></div>
+      </section>
     </section>
   </main>
 
