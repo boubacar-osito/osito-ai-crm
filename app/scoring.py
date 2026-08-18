@@ -92,18 +92,31 @@ def score_lead(lead) -> tuple[int, dict]:
     # "IT à confirmer" must not count as positive evidence.
     text = normalize(f"{lead.headline} {lead.company}")
     commercial_terms = ("ingenieur d'affaire", "charge d'affaire", "chargee d'affaire", "account manager", "business manager", "business developer")
+    talent_terms = ("recrutement", "recruteur", "recruteuse", "talent acquisition", "ressources humaines", "specialiste rh")
+    leadership_terms = ("fondatrice", "fondateur", "co-fondatrice", "co-fondateur", "directrice generale", "directeur general", "dirigeante", "dirigeant", "gerante", "gerant")
+    intermediary_terms = ("consulting", "agency", "cabinet", "conseil")
     crm_terms = ("salesforce", "crm", "erp crm", "practice salesforce")
     it_terms = (" it ", "esn", "digital", "tech", "informatique", "davidson", "sariel", "guarani", "profila")
     access_terms = ("portage", "freelance", "recrutement", "staffing", "ingenieur d'affaire", "business manager", "charge d'affaire")
 
-    role_matches = [term for term in commercial_terms if normalize(term) in text]
+    commercial_matches = [term for term in commercial_terms if normalize(term) in text]
+    talent_matches = [term for term in talent_terms if normalize(term) in text]
+    leadership_matches = [term for term in leadership_terms if normalize(term) in text]
+    intermediary_matches = [term for term in intermediary_terms if normalize(term) in text]
     crm_matches = [term for term in crm_terms if normalize(term) in text]
     it_matches = [term for term in it_terms if normalize(term) in text]
     access_matches = [term for term in access_terms if normalize(term) in text]
+    qualified_talent_intermediary = bool(talent_matches and (it_matches or intermediary_matches))
+    qualified_firm_leader = bool(leadership_matches and it_matches and intermediary_matches)
+    role_matches = sorted(set(commercial_matches + talent_matches + leadership_matches))
 
-    role_points = 30 if role_matches else (20 if "responsable fonctionnel" in text else 0)
+    role_points = 30 if (commercial_matches or qualified_talent_intermediary or qualified_firm_leader) else (20 if "responsable fonctionnel" in text else 0)
     ecosystem_points = 30 if crm_matches else (25 if it_matches else (15 if "openwork" in text or "experconnect" in text else 0))
-    access_points = 25 if access_matches else (20 if crm_matches and "responsable" in text else 0)
+    if access_matches or qualified_talent_intermediary or qualified_firm_leader:
+        access_points = 25
+        access_matches = sorted(set(access_matches + intermediary_matches + leadership_matches))
+    else:
+        access_points = 20 if crm_matches and "responsable" in text else 0
     recency_points = 10 if lead.connected_on else 0
     score = min(100, role_points + ecosystem_points + access_points + recency_points)
     priority = "haute" if score >= 75 else ("moyenne" if score >= 50 else "faible")
