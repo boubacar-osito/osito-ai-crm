@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, engine, get_db
 from .models import CandidateDocument, CandidateProfile, Contact, Lead, Opportunity
-from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadOut, LeadStageUpdate, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
+from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadOut, LeadStageUpdate, OpportunityCoachResult, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
 from .scoring import build_ats_result, score_lead, score_opportunity
 
 
@@ -364,6 +364,32 @@ def update_stage(opportunity_id: int, payload: StageUpdate, db: Session = Depend
     db.commit()
     db.refresh(opportunity)
     return opportunity
+
+
+@app.post("/api/opportunities/{opportunity_id}/coach", response_model=OpportunityCoachResult)
+def coach_opportunity(opportunity_id: int, db: Session = Depends(get_db)):
+    opportunity = db.get(Opportunity, opportunity_id)
+    if not opportunity:
+        raise HTTPException(404, "Mission introuvable")
+
+    company = opportunity.company.strip() or "votre structure"
+    title = opportunity.title.strip()
+    if opportunity.stage in {"nouvelle", "qualifiee"}:
+        return OpportunityCoachResult(
+            situation=f"La mission {title} est suffisamment qualifiée pour une prise de contact directe.",
+            objective="Obtenir un premier échange et faire valider rapidement l'adéquation du profil.",
+            next_action="Personnaliser le message, joindre le CV ciblé si la publication le permet, puis confirmer l'envoi dans le CRM.",
+            suggested_stage="contact",
+            suggested_message=f"Bonjour, j’ai vu votre publication concernant la mission {title} chez {company}. Architecte CRM/Salesforce senior, j’interviens sur le cadrage, la conception de solutions, la gouvernance et le pilotage de delivery. Cette mission correspond directement à mon positionnement et je suis disponible pour en échanger. Je peux vous transmettre immédiatement mon CV ciblé et mes disponibilités. Pourriez-vous me préciser le contexte, la date de démarrage et le processus de sélection ?",
+        )
+
+    return OpportunityCoachResult(
+        situation=f"Une prise de contact est déjà enregistrée pour la mission {title}.",
+        objective="Obtenir un retour concret sans répéter la candidature initiale.",
+        next_action="Relancer brièvement avec une question simple sur l'avancement du besoin.",
+        suggested_stage=opportunity.stage,
+        suggested_message=f"Bonjour, je reviens vers vous au sujet de la mission {title}. Mon expérience en architecture et delivery CRM/Salesforce reste très alignée avec le besoin présenté. Le processus de sélection est-il toujours en cours ? Je reste disponible pour un échange rapide et peux vous renvoyer mon CV ciblé si nécessaire.",
+    )
 
 
 @app.post("/api/ats/analyze", response_model=ATSResult)

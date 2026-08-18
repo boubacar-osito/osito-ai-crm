@@ -69,6 +69,14 @@ class ATSResult(BaseModel):
     warnings: list[str]
 
 
+class OpportunityCoachResult(BaseModel):
+    situation: str
+    objective: str
+    next_action: str
+    suggested_stage: Literal["nouvelle", "qualifiee", "contact", "entretien", "proposition"]
+    suggested_message: str
+
+
 class LeadCreate(BaseModel):
     name: str
     headline: str = ""
