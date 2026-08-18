@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion — MissionFlow</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/login.css">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-card">
+      <div class="brand login-brand"><span>MF</span><strong>MissionFlow</strong></div>
+      <p class="eyebrow">ESPACE PERSONNEL</p>
+      <h1>Pilote ta prochaine mission.</h1>
+      <p class="muted">Connecte-toi pour accéder à ton pipeline Salesforce.</p>
+      <p id="login-error" class="login-error hidden">Connexion refusée. Vérifie le compte Google autorisé.</p>
+      <a class="google-button" href="/auth/google"><span>G</span> Continuer avec Google</a>
+      <details class="local-login">
+        <summary>Connexion locale de secours</summary>
+      <form method="post" action="/login">
+        <label>Identifiant<input name="username" autocomplete="username" required autofocus></label>
+        <label>Mot de passe<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary wide" type="submit">Se connecter</button>
+      </form>
+      </details>
+    </section>
+  </main>
+  <script>const q=new URLSearchParams(location.search);if(q.has('error')||q.has('oauth')||q.has('local'))document.querySelector('#login-error').classList.remove('hidden')</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MissionFlow — CRM de recherche de mission</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <aside>
+    <div class="brand"><span>MF</span><strong>MissionFlow</strong></div>
+    <nav>
+      <button class="nav active" data-view="pipeline">⌁ <span>Pipeline</span></button>
+      <button class="nav" data-view="opportunities">◇ <span>Missions</span></button>
+      <button class="nav" data-view="profile">◎ <span>Mon profil & CV</span></button>
+    </nav>
+    <div class="aside-note"><b>Objectif</b><br>Transformer les bons signaux en mission Salesforce.</div>
+  </aside>
+  <main>
+    <header>
+      <div><p class="eyebrow">TABLEAU DE BORD</p><h1 id="page-title">Pipeline de missions</h1></div>
+      <button class="primary" id="open-modal">+ Ajouter une mission</button>
+    </header>
+    <section id="stats" class="stats"></section>
+    <section id="pipeline-view" class="view"><div id="kanban" class="kanban"></div></section>
+    <section id="opportunities-view" class="view hidden"><div id="mission-list" class="mission-list"></div></section>
+    <section id="profile-view" class="view hidden">
+      <form id="profile-form" class="panel profile-grid">
+        <div class="full"><p class="eyebrow">PROFIL DE RÉFÉRENCE</p><h2>Ce qui rend une mission pertinente</h2><p class="muted">Ces informations alimentent le score et l'analyse ATS.</p></div>
+        <label>Nom<input name="name" required></label><label>Titre cible<input name="title" placeholder="Architecte Salesforce"></label>
+        <label class="full">Résumé<textarea name="summary" rows="4"></textarea></label>
+        <label class="full">Compétences — séparées par des virgules<input name="skills" placeholder="Salesforce, Service Cloud, MuleSoft, Architecture"></label>
+        <label>Rôles recherchés<input name="preferred_roles" placeholder="Architecte Salesforce, Tech Lead"></label>
+        <label>Localisations<input name="preferred_locations" placeholder="Paris, Île-de-France, Remote"></label>
+        <label>TJM minimum (€)<input name="minimum_daily_rate" type="number"></label><label>Disponibilité<input name="availability" placeholder="Immédiate"></label>
+        <label class="full">Contenu texte du CV<textarea name="cv_text" rows="12" placeholder="Colle ici le texte de ton CV. Aucun contenu ne sera inventé."></textarea></label>
+        <div class="full"><button class="primary" type="submit">Enregistrer et recalculer les scores</button></div>
+      </form>
+    </section>
+  </main>
+
+  <dialog id="mission-modal">
+    <form id="mission-form" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">NOUVELLE OPPORTUNITÉ</p><h2>Ajouter une mission</h2></div><button class="icon" value="cancel">×</button></div>
+      <label>Intitulé<input name="title" required placeholder="Architecte Salesforce"></label>
+      <label>Entreprise / intermédiaire<input name="company"></label>
+      <div class="row"><label>Localisation<input name="location" placeholder="Paris"></label><label>Mode<input name="work_mode" placeholder="Hybride"></label></div>
+      <label>TJM proposé (€)<input name="daily_rate" type="number"></label>
+      <label>Lien source<input name="source_url" type="url"></label>
+      <label>Description<textarea name="description" rows="9" required></textarea></label>
+      <button class="primary wide" type="submit">Scorer cette mission</button>
+    </form>
+  </dialog>
+
+  <dialog id="ats-modal"><div id="ats-content"></div></dialog>
+  <div id="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
+

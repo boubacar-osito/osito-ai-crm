@@ -1,0 +1,40 @@
+services:
+  crm:
+    build: .
+    container_name: osito-crm
+    restart: unless-stopped
+    environment:
+      APP_NAME: MissionFlow
+      APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      CORS_ORIGINS: https://${CRM_HOST}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_ALLOWED_EMAIL: ${GOOGLE_ALLOWED_EMAIL}
+      LOCAL_LOGIN_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=osito-net"
+      - "traefik.http.routers.osito-crm.rule=Host(`${CRM_HOST}`)"
+      - "traefik.http.routers.osito-crm.entrypoints=websecure"
+      - "traefik.http.routers.osito-crm.tls.certresolver=letsencrypt"
+      - "traefik.http.services.osito-crm.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.osito-crm-security.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.osito-crm-security.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.osito-crm-security.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.osito-crm-security.headers.frameDeny=true"
+      - "traefik.http.routers.osito-crm.middlewares=osito-crm-security"
+    networks:
+      - osito-net
+
+networks:
+  osito-net:
+    external: true
+
