@@ -126,7 +126,9 @@ def test_coach_recommends_first_message_for_lead_to_contact():
         response = client.post(f"/api/leads/{lead['id']}/coach", json={"latest_message": ""})
         assert response.status_code == 200
         assert response.json()["suggested_stage"] == "message_envoye"
-        assert "m’amène à vous contacter" in response.json()["suggested_message"]
+        assert "merci d’avoir accepté ma demande de connexion" in response.json()["suggested_message"]
+        assert "TotalEnergies" in response.json()["suggested_message"]
+        assert "je suis Architecte CRM/Solution senior" not in response.json()["suggested_message"]
         assert "relance" not in response.json()["suggested_message"]
 
 

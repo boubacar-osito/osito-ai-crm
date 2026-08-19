@@ -316,12 +316,30 @@ def coach_lead(lead_id: int, payload: LeadCoachRequest, db: Session = Depends(ge
 
     if lead.stage in ("nouvelle", "a_contacter"):
         company_context = f" chez {lead.company}" if lead.company else ""
+        came_from_waalaxy = "waalaxy" in (lead.source or "").lower()
+        if came_from_waalaxy:
+            situation = "La piste est qualifiée et a déjà reçu le message de connexion Waalaxy."
+            objective = "Poursuivre la conversation avec une preuve concrète de valeur, sans répéter la présentation initiale."
+            next_action = "Envoyer ce message après acceptation de la connexion, puis classer la piste en « Message envoyé »."
+            suggested_message = (
+                f"Bonjour {first_name}, merci d’avoir accepté ma demande de connexion. "
+                "Pour vous donner un aperçu concret de mon positionnement : j’ai récemment repris l’architecture "
+                "et le delivery d’un programme Salesforce complexe chez TotalEnergies, et piloté un Centre "
+                "d’Excellence couvrant 17 organisations. Avez-vous actuellement un besoin autour de l’architecture "
+                "Salesforce, de la gouvernance CRM ou du cadrage de transformations SI ? Je peux vous transmettre "
+                "mon CV ciblé et mes disponibilités."
+            )
+        else:
+            situation = "Cette piste est qualifiée, mais aucun premier message n'a encore été envoyé."
+            objective = "Démarrer une conversation et vérifier si le contact traite des besoins correspondant au profil."
+            next_action = "Envoyer ce premier message maintenant, puis classer la piste en « Message envoyé »."
+            suggested_message = f"Bonjour {first_name}, je suis Architecte CRM/Solution senior, spécialisé Salesforce et transformation SI, et actuellement disponible pour une mission freelance. Votre activité{company_context} m’amène à vous contacter : accompagnez-vous actuellement des clients ayant des besoins en architecture Salesforce, cadrage CRM ou transformation SI ? Je peux vous transmettre mon CV et mes disponibilités si mon profil peut correspondre à l’un de vos besoins actuels ou à venir."
         return LeadCoachResult(
-            situation="Cette piste est qualifiée, mais aucun premier message n'a encore été envoyé.",
-            objective="Démarrer une conversation et vérifier si le contact traite des besoins correspondant au profil.",
-            next_action="Envoyer ce premier message maintenant, puis classer la piste en « Message envoyé ».",
+            situation=situation,
+            objective=objective,
+            next_action=next_action,
             suggested_stage="message_envoye",
-            suggested_message=f"Bonjour {first_name}, je suis Architecte CRM/Solution senior, spécialisé Salesforce et transformation SI, et actuellement disponible pour une mission freelance. Votre activité{company_context} m’amène à vous contacter : accompagnez-vous actuellement des clients ayant des besoins en architecture Salesforce, cadrage CRM ou transformation SI ? Je peux vous transmettre mon CV et mes disponibilités si mon profil peut correspondre à l’un de vos besoins actuels ou à venir.",
+            suggested_message=suggested_message,
         )
 
     if lead.stage == "a_reactiver":
