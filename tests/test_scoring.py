@@ -33,6 +33,15 @@ def test_ats_never_adds_missing_skills_to_summary():
     assert "cpq" not in result["tailored_summary"].lower()
 
 
+def test_ats_uses_soft_skills_as_posture_not_technical_match():
+    result = build_ats_result(
+        opportunity(description="Salesforce et delivery"),
+        profile(soft_skill_profile="Calme sous pression, autonome et persévérant"),
+    )
+    assert "Calme sous pression" in result["tailored_summary"]
+    assert "calme sous pression" not in result["matched_keywords"]
+
+
 def test_it_business_lead_scores_high():
     lead = SimpleNamespace(
         headline="Ingénieur d'affaires chez SARIEL",

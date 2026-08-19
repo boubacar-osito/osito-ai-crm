@@ -61,6 +61,21 @@ def test_google_login_requires_configuration():
         assert response.headers["location"] == "/login?oauth=unavailable"
 
 
+def test_profile_stores_behavioral_insights_separately_from_cv():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        current = client.get("/api/profile").json()
+        current.update({
+            "soft_skill_profile": "Autonome, calme sous pression et persévérant",
+            "work_preferences": "Culture collaborative, innovante et responsabilisante",
+            "development_points": "Décision parfois prudente et tendance à approfondir",
+        })
+        response = client.put("/api/profile", json=current)
+        assert response.status_code == 200
+        assert response.json()["soft_skill_profile"].startswith("Autonome")
+        assert response.json()["work_preferences"].startswith("Culture collaborative")
+
+
 def test_authenticated_user_can_advance_a_lead():
     with TestClient(app) as client:
         client.post("/login", data={"username": "admin", "password": "development-only"})
@@ -95,8 +110,13 @@ def test_opportunity_coach_prepares_direct_application_message():
         response = client.post(f"/api/opportunities/{mission['id']}/coach")
         assert response.status_code == 200
         assert response.json()["suggested_stage"] == "contact"
-        assert "publication concernant la mission Expert Salesforce" in response.json()["suggested_message"]
-        assert "CV ciblé" in response.json()["suggested_message"]
+        message = response.json()["suggested_message"]
+        assert "candidature à la mission « Expert Salesforce »" in message
+        assert "plus de 10 ans sur Salesforce" in message
+        assert "40 %" in message
+        assert "65 %" in message
+        assert "CV ciblé" in message
+        assert "échange de 15 minutes" in message
 
 
 def test_coach_recommends_first_message_for_lead_to_contact():

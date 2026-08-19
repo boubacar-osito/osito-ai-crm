@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -29,6 +29,16 @@ from .scoring import build_ats_result, score_lead, score_opportunity
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
+    existing_columns = {column["name"] for column in inspect(engine).get_columns("candidate_profiles")}
+    profile_insight_columns = {
+        "soft_skill_profile": "TEXT NOT NULL DEFAULT ''",
+        "work_preferences": "TEXT NOT NULL DEFAULT ''",
+        "development_points": "TEXT NOT NULL DEFAULT ''",
+    }
+    with engine.begin() as connection:
+        for column, definition in profile_insight_columns.items():
+            if column not in existing_columns:
+                connection.execute(text(f"ALTER TABLE candidate_profiles ADD COLUMN {column} {definition}"))
     with Session(engine) as db:
         if not db.scalar(select(CandidateProfile).limit(1)):
             db.add(CandidateProfile())
@@ -376,11 +386,11 @@ def coach_opportunity(opportunity_id: int, db: Session = Depends(get_db)):
     title = opportunity.title.strip()
     if opportunity.stage in {"nouvelle", "qualifiee"}:
         return OpportunityCoachResult(
-            situation=f"La mission {title} est suffisamment qualifiée pour une prise de contact directe.",
-            objective="Obtenir un premier échange et faire valider rapidement l'adéquation du profil.",
-            next_action="Personnaliser le message, joindre le CV ciblé si la publication le permet, puis confirmer l'envoi dans le CRM.",
+            situation=f"La mission {title} mérite une candidature directe qui démontre immédiatement la valeur du profil.",
+            objective="Donner au recruteur des raisons concrètes de retenir le profil et obtenir un entretien de qualification.",
+            next_action="Vérifier les éléments propres à l'offre, joindre le CV ciblé, puis envoyer cette candidature sans attendre une demande d'informations complémentaire.",
             suggested_stage="contact",
-            suggested_message=f"Bonjour, j’ai vu votre publication concernant la mission {title} chez {company}. Architecte CRM/Salesforce senior, j’interviens sur le cadrage, la conception de solutions, la gouvernance et le pilotage de delivery. Cette mission correspond directement à mon positionnement et je suis disponible pour en échanger. Je peux vous transmettre immédiatement mon CV ciblé et mes disponibilités. Pourriez-vous me préciser le contexte, la date de démarrage et le processus de sélection ?",
+            suggested_message=f"Bonjour,\n\nJe vous contacte pour vous proposer ma candidature à la mission « {title} » publiée par {company}. Le besoin correspond directement à mon positionnement d’Architecte CRM/Salesforce senior, avec plus de 20 ans d’expérience SI, dont plus de 10 ans sur Salesforce.\n\nJ’interviens de façon opérationnelle sur le cadrage, l’architecture de solution, l’alignement métier–SI et la sécurisation du delivery. Chez TotalEnergies, j’ai notamment repris un programme Salesforce complexe et contribué à augmenter d’environ 40 % le taux de résolution des incidents. J’ai également réduit de 65 % les délais d’activation grâce à la rationalisation des processus Salesforce.\n\nJe peux ainsi être rapidement autonome sur cette mission, aussi bien dans les arbitrages d’architecture que dans la coordination des équipes et des parties prenantes. Je suis disponible immédiatement en freelance, en Île-de-France ou en mode hybride.\n\nJe vous joins mon CV ciblé. Seriez-vous disponible pour un échange de 15 minutes afin de valider mon adéquation avec le besoin ?\n\nBien cordialement,\nBoubacar DIABY",
         )
 
     return OpportunityCoachResult(

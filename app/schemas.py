@@ -13,6 +13,9 @@ class ProfilePayload(BaseModel):
     minimum_daily_rate: int | None = None
     availability: str = ""
     cv_text: str = ""
+    soft_skill_profile: str = ""
+    work_preferences: str = ""
+    development_points: str = ""
 
 
 class ProfileOut(ProfilePayload):

@@ -18,6 +18,9 @@ class CandidateProfile(Base):
     minimum_daily_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     availability: Mapped[str] = mapped_column(String(120), default="")
     cv_text: Mapped[str] = mapped_column(Text, default="")
+    soft_skill_profile: Mapped[str] = mapped_column(Text, default="")
+    work_preferences: Mapped[str] = mapped_column(Text, default="")
+    development_points: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

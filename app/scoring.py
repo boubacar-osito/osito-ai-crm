@@ -69,10 +69,13 @@ def build_ats_result(opportunity, profile) -> dict:
     ordered = sorted(profile.skills, key=lambda skill: (not contains(opportunity.description, skill), skill.lower()))
     highlights = ", ".join(matched[:6]) or "expertise Salesforce"
     summary = profile.summary.strip()
+    posture = getattr(profile, "soft_skill_profile", "").strip()
     if summary:
         tailored = f"{profile.title or 'Consultant Salesforce'} — {summary} Compétences particulièrement pertinentes pour cette mission : {highlights}."
     else:
         tailored = f"{profile.title or 'Consultant Salesforce'} avec une expertise pertinente en {highlights}."
+    if posture:
+        tailored += f" Posture professionnelle à valoriser selon le contexte : {posture}"
     return {
         "match_score": match_score,
         "matched_keywords": matched,
