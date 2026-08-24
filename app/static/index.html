@@ -6,6 +6,7 @@
   <title>MissionFlow — CRM de recherche de mission</title>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/leads.css">
+  <link rel="stylesheet" href="/static/leads-sync.css">
   <link rel="stylesheet" href="/static/cv.css">
 </head>
 <body>
@@ -29,7 +30,8 @@
     <section id="opportunities-view" class="view hidden"><div id="mission-list" class="mission-list"></div></section>
     <section id="leads-view" class="view">
       <div class="panel lead-intro"><div><b>Votre priorité aujourd’hui</b><span>Faites avancer une piste grâce à la prochaine action et au message recommandé.</span></div><div class="lead-view-switch" role="group" aria-label="Affichage des pistes"><button class="view-toggle active" data-lead-layout="kanban">Kanban</button><button class="view-toggle" data-lead-layout="list">Liste</button></div></div>
-      <div class="lead-filters"><label>Rechercher<input id="lead-search" type="search" placeholder="Nom, entreprise ou fonction"></label><label>Priorité<select id="lead-priority"><option value="all">Toutes</option><option value="high">Haute — 75 et plus</option><option value="medium">Moyenne — 50 à 74</option><option value="low">Faible — moins de 50</option></select></label></div>
+      <div class="lead-sync"><span id="lead-sync-status">Synchronisation des pistes…</span><button class="text-button" id="refresh-leads" type="button">Actualiser maintenant</button></div>
+      <div class="lead-filters"><label>Rechercher<input id="lead-search" type="search" placeholder="Nom, entreprise ou fonction"></label><label>Priorité<select id="lead-priority"><option value="all">Toutes</option><option value="high">Haute — 75 et plus</option><option value="medium">Moyenne — 50 à 74</option><option value="low">Faible — moins de 50</option></select></label><label>Trier<select id="lead-sort"><option value="recent">Ajouts les plus récents</option><option value="score">Meilleur score</option></select></label></div>
       <div id="lead-kanban" class="lead-kanban"></div>
       <div id="lead-list" class="mission-list hidden"></div>
     </section>

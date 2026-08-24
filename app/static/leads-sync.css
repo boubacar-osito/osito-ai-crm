@@ -1,0 +1,26 @@
+.lead-sync {
+  align-items: center;
+  background: #eef4f0;
+  border: 1px solid #d7e4dc;
+  border-radius: 11px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+}
+
+.lead-filters {
+  grid-template-columns: minmax(240px, 1fr) 220px 220px;
+}
+
+@media (max-width: 600px) {
+  .lead-sync {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lead-filters {
+    grid-template-columns: 1fr;
+  }
+}
