@@ -91,6 +91,17 @@ class LeadCreate(BaseModel):
     notes: str = ""
 
 
+class LeadImportBatch(BaseModel):
+    leads: list[LeadCreate] = Field(min_length=1, max_length=200)
+
+
+class LeadImportResult(BaseModel):
+    examined: int
+    created: int
+    duplicates: int
+    lead_ids: list[int]
+
+
 class LeadOut(LeadCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int

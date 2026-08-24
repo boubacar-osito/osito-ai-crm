@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_allowed_email: str = ""
     local_login_enabled: bool = True
+    import_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

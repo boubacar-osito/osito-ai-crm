@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, engine, get_db
 from .models import CandidateDocument, CandidateProfile, Contact, Lead, Opportunity
-from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadOut, LeadStageUpdate, OpportunityCoachResult, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
+from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadImportBatch, LeadImportResult, LeadOut, LeadStageUpdate, OpportunityCoachResult, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
 from .scoring import build_ats_result, score_lead, score_opportunity
 
 
@@ -64,6 +64,12 @@ if settings.google_client_id and settings.google_client_secret:
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     public_paths = {"/login", "/auth/google", "/auth/google/callback", "/api/health"}
+    if request.url.path == "/api/imports/linkedin":
+        supplied_key = request.headers.get("X-Import-Key", "")
+        configured_key = settings.import_api_key
+        if not configured_key or not hmac.compare_digest(supplied_key, configured_key):
+            return JSONResponse({"detail": "Clé d'import invalide"}, status_code=401)
+        return await call_next(request)
     if request.url.path in public_paths or request.url.path.startswith("/static/"):
         return await call_next(request)
     if not request.session.get("authenticated"):
@@ -271,6 +277,36 @@ def create_lead(payload: LeadCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(lead)
     return lead
+
+
+def normalize_linkedin_url(value: str) -> str:
+    return value.strip().split("?")[0].rstrip("/").lower()
+
+
+@app.post("/api/imports/linkedin", response_model=LeadImportResult)
+def import_linkedin_leads(payload: LeadImportBatch, db: Session = Depends(get_db)):
+    existing = {
+        normalize_linkedin_url(url)
+        for url in db.scalars(select(Lead.linkedin_url)).all()
+        if url
+    }
+    created_ids = []
+    duplicates = 0
+    for item in payload.leads:
+        normalized_url = normalize_linkedin_url(item.linkedin_url)
+        if normalized_url in existing:
+            duplicates += 1
+            continue
+        lead = Lead(**item.model_dump())
+        lead.linkedin_url = item.linkedin_url.strip().split("?")[0].rstrip("/") + "/"
+        lead.stage = "a_contacter"
+        lead.score, lead.score_details = score_lead(lead)
+        db.add(lead)
+        db.flush()
+        created_ids.append(lead.id)
+        existing.add(normalized_url)
+    db.commit()
+    return LeadImportResult(examined=len(payload.leads), created=len(created_ids), duplicates=duplicates, lead_ids=created_ids)
 
 
 @app.patch("/api/leads/{lead_id}/stage", response_model=LeadOut)

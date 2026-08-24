@@ -5,6 +5,7 @@ from zipfile import ZipFile
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.config import settings
 
 
 def sample_docx() -> bytes:
@@ -40,6 +41,32 @@ def test_api_rejects_unauthenticated_requests():
     with TestClient(app) as client:
         response = client.get("/api/opportunities")
         assert response.status_code == 401
+
+
+def test_linkedin_import_requires_key_and_deduplicates_urls():
+    previous_key = settings.import_api_key
+    settings.import_api_key = "test-import-key"
+    payload = {
+        "leads": [{
+            "name": "Import LinkedIn Test",
+            "headline": "Business Manager IT",
+            "company": "ESN Test",
+            "linkedin_url": "https://www.linkedin.com/in/import-webhook-test/?trk=test",
+            "connected_on": "2026-08-24",
+        }]
+    }
+    try:
+        with TestClient(app) as client:
+            assert client.post("/api/imports/linkedin", json=payload).status_code == 401
+            first = client.post("/api/imports/linkedin", json=payload, headers={"X-Import-Key": "test-import-key"})
+            second = client.post("/api/imports/linkedin", json=payload, headers={"X-Import-Key": "test-import-key"})
+            assert first.status_code == 200
+            assert first.json()["created"] == 1
+            assert first.json()["duplicates"] == 0
+            assert second.json()["created"] == 0
+            assert second.json()["duplicates"] == 1
+    finally:
+        settings.import_api_key = previous_key
 
 
 def test_local_login_in_development():

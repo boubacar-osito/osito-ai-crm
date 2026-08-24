@@ -71,6 +71,10 @@ Pour une mission nouvelle ou qualifiée, l'assistant prépare une candidature co
 
 Le profil conserve également un document Word maître dans PostgreSQL, hors du dépôt GitHub. Lors de l'import, MissionFlow extrait son texte pour alimenter l'analyse ATS. L'utilisateur peut retélécharger le Word original ou demander une conversion PDF à la volée via LibreOffice dans le conteneur ; aucun fichier temporaire n'est conservé après la réponse.
 
+## Alimentation des pistes LinkedIn
+
+La source principale est un événement Waalaxy relayé par n8n vers `POST /api/imports/linkedin`. L'appel est protégé par l'en-tête `X-Import-Key`, limité à 200 pistes par lot et dédupliqué par URL LinkedIn normalisée. MissionFlow impose le statut `À contacter` et recalcule le score côté serveur. Un contrôle périodique de la page LinkedIn « Mes relations » reste prévu comme rattrapage lorsque Waalaxy n'émet pas l'événement ; il ne doit pas être la seule source, car LinkedIn peut interrompre une session automatisée.
+
 Le profil de référence sépare désormais les compétences démontrées par le CV des enseignements issus d'évaluations comportementales : forces et posture, environnement de réussite et points de vigilance. Ces informations servent à contextualiser une opportunité et à personnaliser un résumé ou un message, mais elles ne sont pas comptées comme compétences techniques dans le score ATS. Les résultats restent déclaratifs et ne doivent jamais être utilisés seuls pour accepter, refuser ou classer une mission.
 
 ```mermaid

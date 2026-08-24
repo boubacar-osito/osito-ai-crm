@@ -13,6 +13,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_ALLOWED_EMAIL: ${GOOGLE_ALLOWED_EMAIL}
       LOCAL_LOGIN_ENABLED: "false"
+      IMPORT_API_KEY: ${IMPORT_API_KEY}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
@@ -37,4 +38,3 @@ services:
 networks:
   osito-net:
     external: true
-
