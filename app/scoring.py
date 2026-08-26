@@ -22,7 +22,11 @@ def score_opportunity(opportunity, profile) -> tuple[int, dict]:
     text = f"{opportunity.title} {opportunity.description} {opportunity.location} {opportunity.work_mode}"
     profile_skills = [s.strip() for s in profile.skills if s.strip()]
     matched_skills = [skill for skill in profile_skills if contains(text, skill)]
-    skill_score = round(45 * len(matched_skills) / max(1, min(len(profile_skills), 10)))
+    # A senior profile naturally contains a broad skill set. The score must
+    # reward evidence found in the mission, not penalize the candidate for
+    # listing additional, unrelated expertise. Five matching skills are
+    # enough to reach the skills component ceiling.
+    skill_score = min(45, len(matched_skills) * 9)
 
     matched_roles = [role for role in profile.preferred_roles if contains(opportunity.title, role)]
     role_score = 20 if matched_roles else 0

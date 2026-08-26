@@ -27,6 +27,21 @@ def test_low_rate_reduces_rate_points():
     assert details["tjm"]["points"]==5
 
 
+def test_broad_senior_profile_is_not_penalized_for_extra_skills():
+    broad_profile = profile(
+        skills=[
+            "Salesforce", "Service Cloud", "MuleSoft", "Architecture", "CRM",
+            "Intégration", "Flows", "APEX", "OmniStudio", "Gouvernance",
+            "Delivery", "Data Cloud", "Agentforce", "Sécurité",
+        ]
+    )
+    mission = opportunity(
+        description="Salesforce Service Cloud, MuleSoft, architecture et intégration CRM"
+    )
+    _, details = score_opportunity(mission, broad_profile)
+    assert details["competences"]["points"] == 45
+
+
 def test_ats_never_adds_missing_skills_to_summary():
     result=build_ats_result(opportunity(description="Salesforce CPQ et Omnistudio"),profile())
     assert "cpq" in result["missing_keywords"]
