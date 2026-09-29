@@ -117,20 +117,51 @@ def score_lead(lead) -> tuple[int, dict]:
     qualified_firm_leader = bool(leadership_matches and it_matches and intermediary_matches)
     role_matches = sorted(set(commercial_matches + talent_matches + leadership_matches))
 
-    role_points = 30 if (commercial_matches or qualified_talent_intermediary or qualified_firm_leader) else (20 if "responsable fonctionnel" in text else 0)
-    ecosystem_points = 30 if crm_matches else (25 if it_matches else (15 if "openwork" in text or "experconnect" in text else 0))
+    decision_terms = ("dsi", "cio", "head of crm", "directeur crm", "directrice crm", "responsable crm", "salesforce product owner")
+    decision_matches = [term for term in decision_terms if normalize(term) in text]
+    role_points = 25 if (commercial_matches or qualified_talent_intermediary or qualified_firm_leader or decision_matches) else (15 if "responsable fonctionnel" in text else 0)
+    ecosystem_points = 25 if crm_matches else (15 if it_matches else (10 if "openwork" in text or "experconnect" in text else 0))
     if access_matches or qualified_talent_intermediary or qualified_firm_leader:
         access_points = 25
         access_matches = sorted(set(access_matches + intermediary_matches + leadership_matches))
     else:
-        access_points = 20 if crm_matches and "responsable" in text else 0
+        access_points = 25 if decision_matches or (crm_matches and "responsable" in text) else 0
+    stage = getattr(lead, "stage", "") or ""
+    relationship_points = {
+        "message_envoye": 10,
+        "qualifiee": 15,
+        "echange_en_cours": 25,
+        "rendez_vous_planifie": 30,
+        "mission_detectee": 30,
+        "mise_en_relation": 30,
+        "partenaire_apporteur": 30,
+        "a_nourrir": 10,
+        "a_reactiver": 10,
+    }.get(stage, 0)
     recency_points = 10 if lead.connected_on else 0
-    score = min(100, role_points + ecosystem_points + access_points + recency_points)
+    identity_points = 10 if getattr(lead, "company", "") and getattr(lead, "linkedin_url", "") else 0
+    if "salesforce" in crm_matches or "practice salesforce" in crm_matches:
+        competencies = ["Salesforce"]
+    elif crm_matches:
+        competencies = ["CRM"]
+    elif it_matches:
+        competencies = ["IT / transformation digitale"]
+    else:
+        competencies = ["À qualifier"]
+    prospect_type = "décideur CRM/SI" if decision_matches else (
+        "apporteur de missions" if commercial_matches or qualified_talent_intermediary else (
+            "dirigeant de cabinet/ESN" if qualified_firm_leader else "contact à qualifier"
+        )
+    )
+    score = min(100, role_points + ecosystem_points + access_points + relationship_points + recency_points + identity_points)
     priority = "haute" if score >= 75 else ("moyenne" if score >= 50 else "faible")
     return score, {
         "priorite": priority,
-        "role_commercial": {"points": role_points, "matches": role_matches},
+        "role_strategique": {"points": role_points, "matches": sorted(set(role_matches + decision_matches))},
         "ecosysteme_it_crm": {"points": ecosystem_points, "matches": sorted(set(crm_matches + it_matches))},
         "acces_aux_missions": {"points": access_points, "matches": access_matches},
+        "relation": {"points": relationship_points, "stage": stage},
         "connexion_recente": {"points": recency_points},
+        "identite_prospect": {"points": identity_points, "entreprise": getattr(lead, "company", ""), "type": prospect_type},
+        "competences": competencies,
     }

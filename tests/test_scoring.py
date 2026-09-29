@@ -65,7 +65,7 @@ def test_it_business_lead_scores_high():
         connected_on=date(2026, 8, 18),
     )
     score, details = score_lead(lead)
-    assert score >= 80
+    assert score == 75
     assert details["priorite"] == "haute"
 
 
@@ -89,7 +89,7 @@ def test_uncertain_note_does_not_inflate_score():
         connected_on=date(2026, 8, 17),
     )
     score, _ = score_lead(lead)
-    assert score == 65
+    assert score == 60
 
 
 def test_curly_apostrophe_is_normalized():
@@ -100,7 +100,7 @@ def test_curly_apostrophe_is_normalized():
         connected_on=date(2026, 8, 18),
     )
     score, _ = score_lead(lead)
-    assert score == 90
+    assert score == 75
 
 
 def test_it_recruitment_firm_leader_scores_high():
@@ -111,7 +111,7 @@ def test_it_recruitment_firm_leader_scores_high():
         connected_on=date(2026, 8, 18),
     )
     score, details = score_lead(lead)
-    assert score >= 85
+    assert score == 75
     assert details["priorite"] == "haute"
     assert details["acces_aux_missions"]["points"] == 25
 
@@ -126,3 +126,17 @@ def test_generalist_hr_profile_without_it_stays_low():
     score, details = score_lead(lead)
     assert score < 50
     assert details["priorite"] == "faible"
+
+
+def test_engaged_relationship_becomes_high_priority():
+    lead = SimpleNamespace(
+        headline="Business Manager Salesforce",
+        company="Pure player Salesforce",
+        notes="",
+        connected_on=date(2026, 9, 16),
+        stage="echange_en_cours",
+    )
+    score, details = score_lead(lead)
+    assert score == 100
+    assert details["priorite"] == "haute"
+    assert details["relation"]["points"] == 25

@@ -6,13 +6,17 @@
   <title>MissionFlow — CRM de recherche de mission</title>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/leads.css">
+  <link rel="stylesheet" href="/static/lead-conversion.css?v=20260916">
   <link rel="stylesheet" href="/static/leads-sync.css">
   <link rel="stylesheet" href="/static/cv.css">
+  <link rel="stylesheet" href="/static/mission-links.css?v=20260912">
+  <link rel="stylesheet" href="/static/sourcing-strategy.css?v=20260929">
 </head>
 <body>
   <aside>
     <div class="brand"><span>MF</span><strong>MissionFlow</strong></div>
     <nav>
+      <button class="nav" data-view="sales-agent">✦ <span>Agent commercial</span></button>
       <button class="nav active" data-view="leads">◉ <span>Pistes à convertir</span></button>
       <button class="nav" data-view="opportunities">◇ <span>Missions détectées</span></button>
       <button class="nav" data-view="pipeline">⌁ <span>Pipeline missions</span></button>
@@ -27,11 +31,30 @@
     </header>
     <section id="stats" class="stats"></section>
     <section id="pipeline-view" class="view hidden"><div id="kanban" class="kanban"></div></section>
-    <section id="opportunities-view" class="view hidden"><div id="mission-list" class="mission-list"></div></section>
+    <section id="opportunities-view" class="view hidden">
+      <div class="panel sourcing-panel">
+        <div class="sourcing-heading"><div><p class="eyebrow">STRATÉGIE D’ACQUISITION</p><h2>Concentrer l’effort sur les canaux qui convertissent</h2><p class="muted">Objectif recommandé : 50 % réseau LinkedIn, 30 % plateformes prioritaires, 15 % plateformes complémentaires et 5 % marchés publics.</p></div></div>
+        <div id="channel-strategy" class="channel-strategy"></div>
+        <div class="mission-filters">
+          <label>Rechercher<input id="mission-search" type="search" placeholder="Mission, entreprise ou compétence"></label>
+          <label>Canal<select id="mission-channel"><option value="all">Tous les canaux</option><option value="linkedin">Réseau LinkedIn</option><option value="priority">Free-Work / Freelance-Informatique</option><option value="specialist">LeHibou / Malt / Comet et autres</option><option value="public">Marchés publics</option><option value="other">Direct / autre source</option></select></label>
+          <label>Trier<select id="mission-sort"><option value="score">Meilleur score</option><option value="recent">Ajouts les plus récents</option><option value="rate">TJM le plus élevé</option></select></label>
+        </div>
+      </div>
+      <div id="mission-list" class="mission-list"></div>
+    </section>
+    <section id="sales-agent-view" class="view hidden">
+      <div class="agent-hero panel">
+        <div><p class="eyebrow">COPILOTE DE CONVERSION</p><h2>Les meilleures actions à réaliser aujourd’hui</h2><p class="muted">L’agent priorise, prépare et planifie. Aucun message n’est envoyé sans votre validation.</p></div>
+        <button class="primary" id="run-sales-agent" type="button">Actualiser le plan d’action</button>
+      </div>
+      <div id="sales-agent-status" class="agent-status"></div>
+      <div id="sales-agent-actions" class="agent-actions"></div>
+    </section>
     <section id="leads-view" class="view">
       <div class="panel lead-intro"><div><b>Votre priorité aujourd’hui</b><span>Faites avancer une piste grâce à la prochaine action et au message recommandé.</span></div><div class="lead-view-switch" role="group" aria-label="Affichage des pistes"><button class="view-toggle active" data-lead-layout="kanban">Kanban</button><button class="view-toggle" data-lead-layout="list">Liste</button></div></div>
       <div class="lead-sync"><span id="lead-sync-status">Synchronisation des pistes…</span><button class="text-button" id="refresh-leads" type="button">Actualiser maintenant</button></div>
-      <div class="lead-filters"><label>Rechercher<input id="lead-search" type="search" placeholder="Nom, entreprise ou fonction"></label><label>Priorité<select id="lead-priority"><option value="all">Toutes</option><option value="high">Haute — 75 et plus</option><option value="medium">Moyenne — 50 à 74</option><option value="low">Faible — moins de 50</option></select></label><label>Trier<select id="lead-sort"><option value="recent">Ajouts les plus récents</option><option value="score">Meilleur score</option></select></label></div>
+      <div class="lead-filters"><label>Rechercher<input id="lead-search" type="search" placeholder="Nom, entreprise ou fonction"></label><label>Priorité<select id="lead-priority"><option value="all">Toutes</option><option value="high">Haute — 75 et plus</option><option value="medium">Moyenne — 50 à 74</option><option value="low">Faible — moins de 50</option></select></label><label>Cible commerciale<select id="lead-persona"><option value="all">Toutes</option><option value="apporteur">Apporteurs de missions</option><option value="decideur">Décideurs CRM/SI</option><option value="dirigeant">Dirigeants de cabinet/ESN</option><option value="other">À qualifier</option></select></label><label>Trier<select id="lead-sort"><option value="recent">Ajouts les plus récents</option><option value="score">Meilleur score</option></select></label></div>
       <div id="lead-kanban" class="lead-kanban"></div>
       <div id="lead-list" class="mission-list hidden"></div>
     </section>
@@ -75,6 +98,6 @@
   <dialog id="ats-modal"><div id="ats-content"></div></dialog>
   <dialog id="coach-modal"><div id="coach-content"></div></dialog>
   <div id="toast"></div>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=20260916-agent"></script>
 </body>
 </html>

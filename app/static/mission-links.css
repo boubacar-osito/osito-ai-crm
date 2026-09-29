@@ -1,0 +1,24 @@
+.apply-link {
+  display: block;
+  margin: 9px 0;
+  border: 1px solid var(--green);
+  border-radius: 10px;
+  padding: 9px 11px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+}
+
+.apply-link:hover {
+  background: var(--mint);
+}
+
+.archive-opportunity {
+  color: var(--red);
+}
+
+.restore-opportunity {
+  color: var(--green);
+}

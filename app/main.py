@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from hashlib import sha256
 import hmac
 from io import BytesIO
@@ -16,13 +17,13 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from sqlalchemy import inspect, select, text
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import Base, engine, get_db
-from .models import CandidateDocument, CandidateProfile, Contact, Lead, Opportunity
-from .schemas import ATSRequest, ATSResult, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadImportBatch, LeadImportResult, LeadOut, LeadStageUpdate, OpportunityCoachResult, OpportunityCreate, OpportunityOut, ProfileOut, ProfilePayload, StageUpdate
+from .models import CandidateDocument, CandidateProfile, Contact, Lead, LeadAction, LeadImportRun, Opportunity
+from .schemas import ATSRequest, ATSResult, AutomatedFollowupCandidate, AutomatedFollowupSent, AutomatedLeadResponse, AutomatedOutreachCandidate, AutomatedOutreachSent, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadImportBatch, LeadImportResult, LeadImportStatus, LeadOut, LeadStageUpdate, OpportunityCoachResult, OpportunityCreate, OpportunityOut, OpportunityStageUpdate, ProfileOut, ProfilePayload, SalesAgentActionOut, SalesAgentBriefing, SalesAgentConfirm, SalesAgentSnooze
 from .scoring import build_ats_result, score_lead, score_opportunity
 
 
@@ -64,7 +65,7 @@ if settings.google_client_id and settings.google_client_secret:
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     public_paths = {"/login", "/auth/google", "/auth/google/callback", "/api/health"}
-    if request.url.path == "/api/imports/linkedin":
+    if request.url.path == "/api/imports/linkedin" or request.url.path.startswith("/api/automation/"):
         supplied_key = request.headers.get("X-Import-Key", "")
         configured_key = settings.import_api_key
         if not configured_key or not hmac.compare_digest(supplied_key, configured_key):
@@ -283,6 +284,209 @@ def normalize_linkedin_url(value: str) -> str:
     return value.strip().split("?")[0].rstrip("/").lower()
 
 
+def lead_persona(lead: Lead) -> str:
+    text = f"{lead.headline} {lead.company}".lower()
+    introducer_terms = (
+        "business manager", "ingénieur d'affaire", "ingénieur d’affaire", "recruteur",
+        "recruteuse", "recrutement", "talent acquisition", "talent specialist",
+        "account manager", "staffing", "commercial", "portage", "esn", "cabinet",
+    )
+    decision_terms = (
+        "dsi", "cio", "head of", "directeur crm", "directrice crm", "responsable crm",
+        "salesforce manager", "product owner salesforce", "customer experience",
+        "transformation", "digital director", "chief information",
+    )
+    partner_terms = (
+        "architecte salesforce", "salesforce architect", "consultant salesforce",
+        "expert salesforce", "freelance salesforce", "founder", "fondateur", "fondatrice",
+    )
+    if any(term in text for term in introducer_terms):
+        return "apporteur"
+    if any(term in text for term in decision_terms):
+        return "decideur"
+    if any(term in text for term in partner_terms):
+        return "partenaire"
+    return "contact"
+
+
+def post_acceptance_message(lead: Lead, first_name: str) -> tuple[str, str, str]:
+    persona = lead_persona(lead)
+    company = f" chez {lead.company}" if lead.company else ""
+    if persona == "apporteur":
+        return (
+            "apporteur de missions",
+            "Vérifier s'il porte un besoin actif ou peut vous orienter vers le bon responsable de practice.",
+            f"Bonjour {first_name}, merci d’avoir accepté ma demande de connexion. "
+            "J’interviens sur des missions d’architecture, de delivery et de gouvernance Salesforce, "
+            "notamment sur des contextes multi-org, Sales/Service Cloud, Data et MuleSoft. "
+            f"Au regard de votre activité{company}, avez-vous actuellement ou prochainement un besoin "
+            "sur lequel ce positionnement pourrait être utile, ou un responsable de practice vers qui m’orienter ?",
+        )
+    if persona == "decideur":
+        return (
+            "décideur CRM/SI",
+            "Ouvrir un échange entre pairs sur une priorité mesurable, sans proposer immédiatement votre CV.",
+            f"Bonjour {first_name}, merci d’avoir accepté ma demande de connexion. "
+            "J’accompagne des organisations sur l’harmonisation de leurs usages Salesforce et sur la traduction "
+            "des orientations CRM en résultats mesurables : adoption, conversion, renouvellement et qualité de service. "
+            f"Dans votre contexte{company}, quel sujet est aujourd’hui prioritaire : gouvernance multi-org, "
+            "optimisation des parcours ou agentification du CRM ? Je serais ravi d’échanger 15 minutes sur vos enjeux.",
+        )
+    if persona == "partenaire":
+        return (
+            "partenaire Salesforce potentiel",
+            "Tester une logique de complémentarité et de recommandations croisées.",
+            f"Bonjour {first_name}, merci d’avoir accepté ma demande de connexion. "
+            "Nos expertises Salesforce semblent complémentaires. Je développe un réseau resserré de partenaires "
+            "pour partager des opportunités, compléter des équipes et répondre ensemble à certains besoins clients. "
+            "Seriez-vous disponible pour un échange de 15 minutes afin de voir dans quels cas nous pourrions nous recommander mutuellement ?",
+        )
+    return (
+        "contact à qualifier",
+        "Comprendre son rôle dans l'écosystème et obtenir une orientation précise.",
+        f"Bonjour {first_name}, merci d’avoir accepté ma demande de connexion. "
+        "Je suis spécialisé en architecture, delivery et gouvernance Salesforce pour des transformations CRM complexes. "
+        f"Votre activité{company} a retenu mon attention : intervenez-vous directement sur ces sujets, "
+        "ou pourriez-vous m’indiquer la personne la plus pertinente avec qui échanger ?",
+    )
+
+
+FOLLOWUP_ACTION_TYPES = {
+    "qualification_j3": "auto_followup_qualification_j3",
+    "valeur_j10": "auto_followup_valeur_j10",
+    "reactivation_j30": "auto_followup_reactivation_j30",
+}
+
+
+def followup_message(lead: Lead, sequence_step: str) -> tuple[str, str]:
+    """Build a short post-Waalaxy message adapted to the contact's role."""
+    first_name = lead.name.split()[0] if lead.name else ""
+    persona = lead_persona(lead)
+    company = f" chez {lead.company}" if lead.company else ""
+    if sequence_step == "qualification_j3":
+        messages = {
+            "apporteur": (
+                "Qualifier le prospect et détecter une opportunité disponible dans son pipe.",
+                f"Bonjour {first_name}, pour mieux comprendre les sujets que vous suivez{company}, "
+                "avez-vous actuellement dans votre pipe une mission CRM ou Salesforce ouverte, ou susceptible "
+                "de démarrer dans les prochaines semaines ? Je cible surtout l’architecture, la gouvernance et "
+                "le delivery sur des environnements complexes."
+            ),
+            "decideur": (
+                "Identifier une priorité CRM/Salesforce et l'éventuel recours à un renfort externe.",
+                f"Bonjour {first_name}, parmi vos priorités CRM ou Salesforce{company}, avez-vous un chantier "
+                "prévu dans les trois à six prochains mois sur lequel un renfort externe senior pourrait être utile : "
+                "architecture, gouvernance, adoption ou optimisation des parcours ?"
+            ),
+            "partenaire": (
+                "Détecter une complémentarité immédiate ou une opportunité à traiter ensemble.",
+                f"Bonjour {first_name}, pour rendre notre mise en relation concrète, avez-vous actuellement un projet "
+                "Salesforce nécessitant un renfort senior ou une expertise complémentaire ? De mon côté, je peux "
+                "intervenir sur l’architecture, la gouvernance et le delivery CRM."
+            ),
+            "contact": (
+                "Confirmer le rôle du contact et obtenir l'interlocuteur ou le besoin pertinent.",
+                f"Bonjour {first_name}, afin de vous solliciter uniquement sur les sujets pertinents, intervenez-vous "
+                "sur les besoins CRM/Salesforce de votre organisation ? Si oui, avez-vous un chantier ouvert ou à venir ; "
+                "sinon, qui serait la bonne personne avec qui échanger ?"
+            ),
+        }
+        return messages[persona]
+    if sequence_step == "valeur_j10":
+        messages = {
+            "apporteur": (
+                "Créer un repère mémorable pour être rappelé dès qu'un besoin entre dans le pipe.",
+                f"Bonjour {first_name}, un repère simple pour vos prochains besoins : j’interviens lorsque le client "
+                "doit cadrer une trajectoire Salesforce, sécuriser un delivery complexe ou harmoniser plusieurs orgs. "
+                "Quels critères vous seraient les plus utiles pour me positionner rapidement lorsqu’une mission de ce type apparaît ?"
+            ),
+            "decideur": (
+                "Apporter un angle concret et faire émerger un enjeu prioritaire.",
+                f"Bonjour {first_name}, sur les transformations CRM, trois signaux déclenchent souvent mon intervention : "
+                "des usages hétérogènes, une dette qui ralentit le delivery ou des résultats métier difficiles à mesurer. "
+                "L’un de ces sujets est-il présent dans votre contexte cette année ?"
+            ),
+            "partenaire": (
+                "Rendre la recommandation mutuelle simple et actionnable.",
+                f"Bonjour {first_name}, pour faciliter une recommandation future, mes terrains les plus forts sont les "
+                "programmes Salesforce complexes, la gouvernance multi-org et l’alignement métier–SI. Quels types de "
+                "missions ou de compétences souhaitez-vous, de votre côté, que je garde en tête pour vous ?"
+            ),
+            "contact": (
+                "Obtenir une orientation sans répéter la présentation initiale.",
+                f"Bonjour {first_name}, je précise mon angle pour faciliter l’orientation : architecture et gouvernance "
+                "Salesforce, cadrage CRM et sécurisation du delivery. Est-ce un sujet suivi par votre équipe, ou puis-je "
+                "contacter de votre part l’interlocuteur qui le porte ?"
+            ),
+        }
+        return messages[persona]
+    messages = {
+        "apporteur": (
+            "Revenir dans le radar au moment où de nouveaux besoins peuvent entrer dans le pipe.",
+            f"Bonjour {first_name}, petit point de disponibilité : je reste mobilisable pour une mission senior CRM/Salesforce. "
+            "Un besoin d’architecture, de gouvernance ou de delivery est-il entré récemment dans votre pipe ? Si le timing "
+            "n’est pas encore défini, je peux aussi vous donner mes critères de disponibilité pour le prochain trimestre."
+        ),
+        "decideur": (
+            "Réactiver la relation avec une question liée au calendrier de transformation.",
+            f"Bonjour {first_name}, je me permets de reprendre contact : vos priorités CRM/Salesforce pour le prochain "
+            "trimestre sont-elles désormais arrêtées ? Je reste disponible si un regard senior externe peut accélérer "
+            "le cadrage ou sécuriser l’exécution."
+        ),
+        "partenaire": (
+            "Maintenir la relation et rouvrir la possibilité d'une coopération.",
+            f"Bonjour {first_name}, je reprends brièvement contact pour le prochain trimestre. Avez-vous identifié un besoin "
+            "Salesforce sur lequel une complémentarité serait utile ? Je garde également votre positionnement en tête "
+            "pour les opportunités que je pourrais croiser."
+        ),
+        "contact": (
+            "Vérifier si le contexte a évolué et obtenir une orientation.",
+            f"Bonjour {first_name}, je me permets un dernier point : un besoin CRM/Salesforce s’est-il précisé récemment "
+            "dans votre organisation ? Dans le cas contraire, je serais reconnaissant si vous pouviez m’indiquer le bon interlocuteur."
+        ),
+    }
+    return messages[persona]
+
+
+def automated_followup_plan(lead: Lead, db: Session) -> dict | None:
+    """Return the next due step after the Waalaxy introduction, or None."""
+    if lead.stage != "message_envoye" or lead.score <= 80:
+        return None
+    actions = db.scalars(
+        select(LeadAction)
+        .where(LeadAction.lead_id == lead.id, LeadAction.status == "completed")
+        .order_by(LeadAction.completed_at.desc(), LeadAction.id.desc())
+    ).all()
+    action_by_type = {action.action_type: action for action in actions}
+    first_contact = next((
+        action for action in actions
+        if action.action_type in ("auto_first_contact", "existing_first_contact", "premier_message")
+    ), None)
+    # Candidate-list reads must never postpone a legacy follow-up. When no
+    # completed first-contact audit exists, use the immutable creation date
+    # rather than ``updated_at`` (which also changes when scores are refreshed).
+    anchor = (first_contact.completed_at if first_contact and first_contact.completed_at else lead.created_at)
+    sequence = (
+        ("qualification_j3", 3, None),
+        ("valeur_j10", 7, "qualification_j3"),
+        ("reactivation_j30", 20, "valeur_j10"),
+    )
+    for step, wait_days, previous_step in sequence:
+        action_type = FOLLOWUP_ACTION_TYPES[step]
+        if action_type in action_by_type:
+            continue
+        if previous_step:
+            previous = action_by_type.get(FOLLOWUP_ACTION_TYPES[previous_step])
+            if not previous or not previous.completed_at:
+                return None
+            due_at = previous.completed_at + timedelta(days=wait_days)
+        else:
+            due_at = anchor + timedelta(days=wait_days)
+        objective, message = followup_message(lead, step)
+        return {"sequence_step": step, "objective": objective, "message": message, "due_at": due_at}
+    return None
+
+
 @app.post("/api/imports/linkedin", response_model=LeadImportResult)
 def import_linkedin_leads(payload: LeadImportBatch, db: Session = Depends(get_db)):
     existing = {
@@ -305,8 +509,30 @@ def import_linkedin_leads(payload: LeadImportBatch, db: Session = Depends(get_db
         db.flush()
         created_ids.append(lead.id)
         existing.add(normalized_url)
+    imported_at = datetime.utcnow()
+    total_leads = db.scalar(select(func.count(Lead.id))) or 0
+    db.add(LeadImportRun(
+        source=payload.leads[0].source or "LinkedIn — import automatique",
+        examined=len(payload.leads),
+        created=len(created_ids),
+        duplicates=duplicates,
+        total_leads=total_leads,
+        imported_at=imported_at,
+    ))
     db.commit()
-    return LeadImportResult(examined=len(payload.leads), created=len(created_ids), duplicates=duplicates, lead_ids=created_ids)
+    return LeadImportResult(
+        examined=len(payload.leads),
+        created=len(created_ids),
+        duplicates=duplicates,
+        lead_ids=created_ids,
+        total_leads=total_leads,
+        imported_at=imported_at,
+    )
+
+
+@app.get("/api/imports/linkedin/latest", response_model=LeadImportStatus | None)
+def latest_linkedin_import(db: Session = Depends(get_db)):
+    return db.scalar(select(LeadImportRun).order_by(LeadImportRun.imported_at.desc(), LeadImportRun.id.desc()).limit(1))
 
 
 @app.patch("/api/leads/{lead_id}/stage", response_model=LeadOut)
@@ -315,6 +541,7 @@ def update_lead_stage(lead_id: int, payload: LeadStageUpdate, db: Session = Depe
     if not lead:
         raise HTTPException(404, "Piste introuvable")
     lead.stage = payload.stage
+    lead.score, lead.score_details = score_lead(lead)
     db.commit()
     db.refresh(lead)
     return lead
@@ -328,6 +555,24 @@ def coach_lead(lead_id: int, payload: LeadCoachRequest, db: Session = Depends(ge
     first_name = lead.name.split()[0]
     message = payload.latest_message.strip()
     normalized = message.lower()
+
+    if message and any(term in normalized for term in ("teams", "rendez-vous", "rendez vous", "créneau", "creneau", "disponible demain", "appel demain")):
+        return LeadCoachResult(
+            situation="Le contact propose ou confirme un échange.",
+            objective="Sécuriser le rendez-vous et préparer trois questions de qualification.",
+            next_action="Confirmer le créneau, puis classer la piste en « Rendez-vous planifié ».",
+            suggested_stage="rendez_vous_planifie",
+            suggested_message=f"Bonjour {first_name}, merci pour votre retour. Avec plaisir pour cet échange. Le créneau proposé me convient ; vous pouvez m’envoyer l’invitation Teams. Je préparerai une présentation synthétique de mon positionnement ainsi que quelques questions sur vos besoins Salesforce actuels et à venir. À très bientôt.",
+        )
+
+    if message and any(term in normalized for term in ("mettre en relation", "mets en relation", "mettrai en relation", "transmettre vos coordonnées", "transmettre votre profil")):
+        return LeadCoachResult(
+            situation="Le contact accepte de vous recommander ou de vous mettre en relation.",
+            objective="Faciliter l'introduction avec une formulation courte et transférable.",
+            next_action="Remercier, envoyer votre résumé en trois lignes et classer la piste en « Mise en relation ».",
+            suggested_stage="mise_en_relation",
+            suggested_message=f"Bonjour {first_name}, merci beaucoup pour votre proposition. Pour faciliter la mise en relation : Boubacar Diaby, Architecte CRM/Solution senior spécialisé Salesforce, intervient sur l’architecture, le delivery, la gouvernance multi-org et l’optimisation mesurable des parcours CRM. Je suis actuellement disponible en freelance. Je vous transmets volontiers mon CV si cela peut être utile à votre contact.",
+        )
 
     if message and any(term in normalized for term in ("pas de mission", "aucune mission", "n'ai pas de mission", "n’ai pas de mission")):
         if any(term in normalized for term in ("cv", "gardons contact", "mettrez en relation", "mettrai en relation")):
@@ -345,31 +590,15 @@ def coach_lead(lead_id: int, payload: LeadCoachRequest, db: Session = Depends(ge
         )
     if message:
         return LeadCoachResult(
-            situation="Le contact a répondu : la conversation est engagée.", objective="Qualifier l'existence d'un besoin, son calendrier et le décideur.",
-            next_action="Répondre en proposant un échange de 15 minutes et demander les besoins prioritaires.", suggested_stage="echange_en_cours",
-            suggested_message=f"Bonjour {first_name}, merci pour votre retour. Pour voir rapidement si mon profil peut répondre à l’un de vos besoins, seriez-vous disponible pour un échange de 15 minutes cette semaine ? Je pourrai vous présenter mes expériences récentes en architecture CRM/Salesforce et comprendre vos priorités actuelles ou à venir.",
+            situation="Le contact a répondu : la piste est désormais qualifiée.", objective="Identifier un besoin, un calendrier ou une mise en relation concrète.",
+            next_action="Répondre avec une question précise et proposer un échange de 15 minutes ; relancer à J+3 si nécessaire.", suggested_stage="qualifiee",
+            suggested_message=f"Bonjour {first_name}, merci pour votre retour. Parmi vos sujets actuels ou à venir, identifiez-vous un besoin autour de l’architecture Salesforce, de la gouvernance CRM ou de l’optimisation des parcours ? Si oui, je vous propose un échange de 15 minutes afin de qualifier rapidement le contexte, le calendrier et les interlocuteurs concernés.",
         )
 
     if lead.stage in ("nouvelle", "a_contacter"):
-        company_context = f" chez {lead.company}" if lead.company else ""
-        came_from_waalaxy = "waalaxy" in (lead.source or "").lower()
-        if came_from_waalaxy:
-            situation = "La piste est qualifiée et a déjà reçu le message de connexion Waalaxy."
-            objective = "Poursuivre la conversation avec une preuve concrète de valeur, sans répéter la présentation initiale."
-            next_action = "Envoyer ce message après acceptation de la connexion, puis classer la piste en « Message envoyé »."
-            suggested_message = (
-                f"Bonjour {first_name}, merci d’avoir accepté ma demande de connexion. "
-                "Pour vous donner un aperçu concret de mon positionnement : j’ai récemment repris l’architecture "
-                "et le delivery d’un programme Salesforce complexe chez TotalEnergies, et piloté un Centre "
-                "d’Excellence couvrant 17 organisations. Avez-vous actuellement un besoin autour de l’architecture "
-                "Salesforce, de la gouvernance CRM ou du cadrage de transformations SI ? Je peux vous transmettre "
-                "mon CV ciblé et mes disponibilités."
-            )
-        else:
-            situation = "Cette piste est qualifiée, mais aucun premier message n'a encore été envoyé."
-            objective = "Démarrer une conversation et vérifier si le contact traite des besoins correspondant au profil."
-            next_action = "Envoyer ce premier message maintenant, puis classer la piste en « Message envoyé »."
-            suggested_message = f"Bonjour {first_name}, je suis Architecte CRM/Solution senior, spécialisé Salesforce et transformation SI, et actuellement disponible pour une mission freelance. Votre activité{company_context} m’amène à vous contacter : accompagnez-vous actuellement des clients ayant des besoins en architecture Salesforce, cadrage CRM ou transformation SI ? Je peux vous transmettre mon CV et mes disponibilités si mon profil peut correspondre à l’un de vos besoins actuels ou à venir."
+        persona_label, objective, suggested_message = post_acceptance_message(lead, first_name)
+        situation = f"La connexion est acceptée ; le contact est identifié comme {persona_label}."
+        next_action = "Personnaliser puis envoyer ce message. Sans réponse, relancer à J+3 et apporter un cas concret à J+8."
         return LeadCoachResult(
             situation=situation,
             objective=objective,
@@ -378,7 +607,7 @@ def coach_lead(lead_id: int, payload: LeadCoachRequest, db: Session = Depends(ge
             suggested_message=suggested_message,
         )
 
-    if lead.stage == "a_reactiver":
+    if lead.stage in ("a_reactiver", "a_nourrir"):
         return LeadCoachResult(
             situation="Le contact est connu, mais la conversation doit être réactivée.",
             objective="Revenir dans son radar avec une disponibilité et un positionnement précis.",
@@ -396,11 +625,399 @@ def coach_lead(lead_id: int, payload: LeadCoachRequest, db: Session = Depends(ge
             suggested_message="Collez d’abord la dernière réponse reçue afin de générer un message adapté sans inventer le contexte.",
         )
 
+    persona = lead_persona(lead)
+    follow_ups = {
+        "apporteur": f"Bonjour {first_name}, je me permets une courte relance. Pour être concret, je cible des missions d’architecture, de gouvernance ou de delivery Salesforce sur des environnements complexes. Avez-vous un besoin à venir correspondant, ou un responsable de practice vers qui m’orienter ?",
+        "decideur": f"Bonjour {first_name}, je me permets de revenir vers vous avec une question concrète : parmi l’adoption, la conversion, le renouvellement et la qualité de service, quel indicateur CRM cherchez-vous aujourd’hui à améliorer en priorité ? Je serais ravi de partager quelques retours d’expérience lors d’un échange court.",
+        "partenaire": f"Bonjour {first_name}, je me permets une courte relance au sujet d’une possible complémentarité. Je serais intéressé par un échange de 15 minutes pour identifier les types de missions ou de compétences sur lesquels nous pourrions nous recommander mutuellement.",
+        "contact": f"Bonjour {first_name}, je me permets une courte relance. Êtes-vous la bonne personne pour échanger sur des sujets d’architecture et de transformation Salesforce, ou pourriez-vous m’orienter vers l’interlocuteur concerné ?",
+    }
     return LeadCoachResult(
-        situation="Premier message envoyé, sans réponse pour le moment.", objective="Obtenir une réponse en apportant un élément concret et facile à qualifier.",
-        next_action="Relancer 3 jours ouvrés après le premier message. Ne pas renvoyer une présentation générale.", suggested_stage="message_envoye",
-        suggested_message=f"Bonjour {first_name}, je me permets une courte relance. J’interviens sur des missions d’architecture CRM/Salesforce, notamment sur le cadrage, la conception de solutions et l’alignement métier–SI. Avez-vous actuellement, ou prochainement, un besoin sur lequel ce positionnement pourrait être pertinent ? Je peux vous transmettre mon CV ciblé et mes disponibilités si utile.",
+        situation="Premier message envoyé, sans réponse pour le moment.", objective="Obtenir une réponse avec une question adaptée au rôle du contact.",
+        next_action="Envoyer cette relance à J+3. À J+8, partager une preuve concrète ; à J+21, passer la piste en « À nourrir ».", suggested_stage="message_envoye",
+        suggested_message=follow_ups[persona],
     )
+
+
+def sales_agent_plan(lead: Lead) -> dict | None:
+    """Return the next useful conversion action without sending anything externally."""
+    now = datetime.utcnow()
+    age = max(0, (now - (lead.updated_at or lead.created_at or now)).days)
+    first_name = lead.name.split()[0] if lead.name else ""
+    base_priority = min(95, max(20, lead.score) + {
+        "qualifiee": 15,
+        "echange_en_cours": 20,
+        "rendez_vous_planifie": 25,
+        "mission_detectee": 25,
+        "mise_en_relation": 20,
+    }.get(lead.stage, 0))
+
+    if lead.stage in ("nouvelle", "a_contacter"):
+        persona, objective, message = post_acceptance_message(lead, first_name)
+        return {
+            "action_type": "premier_message",
+            "title": f"Contacter {lead.name}",
+            "rationale": f"Connexion acceptée · profil {persona}. {objective}",
+            "message": message,
+            "target_stage": "message_envoye",
+            "priority": base_priority,
+        }
+    if lead.stage == "message_envoye" and age >= 3:
+        follow_ups = {
+            "apporteur": f"Bonjour {first_name}, je me permets une courte relance. Pour être concret, je cible des missions d’architecture, de gouvernance ou de delivery Salesforce sur des environnements complexes. Avez-vous un besoin à venir correspondant, ou un responsable de practice vers qui m’orienter ?",
+            "decideur": f"Bonjour {first_name}, je me permets de revenir vers vous avec une question concrète : parmi l’adoption, la conversion, le renouvellement et la qualité de service, quel indicateur CRM cherchez-vous aujourd’hui à améliorer en priorité ? Je serais ravi de partager quelques retours d’expérience lors d’un échange court.",
+            "partenaire": f"Bonjour {first_name}, je me permets une courte relance au sujet d’une possible complémentarité. Je serais intéressé par un échange de 15 minutes pour identifier les types de missions ou de compétences sur lesquels nous pourrions nous recommander mutuellement.",
+            "contact": f"Bonjour {first_name}, je me permets une courte relance. Êtes-vous la bonne personne pour échanger sur des sujets d’architecture et de transformation Salesforce, ou pourriez-vous m’orienter vers l’interlocuteur concerné ?",
+        }
+        return {
+            "action_type": "relance",
+            "title": f"Relancer {lead.name}",
+            "rationale": f"Aucune progression enregistrée depuis {age} jours. La relance est adaptée au rôle du contact.",
+            "message": follow_ups[lead_persona(lead)],
+            "target_stage": "message_envoye",
+            "priority": min(100, base_priority + min(age, 15)),
+        }
+    if lead.stage in ("qualifiee", "echange_en_cours") and age >= 1:
+        return {
+            "action_type": "qualification",
+            "title": f"Qualifier le besoin avec {lead.name}",
+            "rationale": "La conversation est engagée : il faut obtenir un besoin, un calendrier et le décideur concerné.",
+            "message": (
+                f"Bonjour {first_name}, pour avancer concrètement, pourriez-vous me préciser les priorités Salesforce "
+                "concernées, le calendrier envisagé et les interlocuteurs impliqués dans la décision ? "
+                "Je vous propose un échange de 15 minutes pour vérifier rapidement l’adéquation avec mon expérience."
+            ),
+            "target_stage": "echange_en_cours",
+            "priority": base_priority,
+        }
+    if lead.stage == "rendez_vous_planifie":
+        return {
+            "action_type": "preparation_rendez_vous",
+            "title": f"Préparer le rendez-vous avec {lead.name}",
+            "rationale": "Préparer trois questions : besoin prioritaire, calendrier de décision et critères de réussite.",
+            "message": "",
+            "target_stage": "rendez_vous_planifie",
+            "priority": 100,
+        }
+    if lead.stage == "mission_detectee" and age >= 1:
+        return {
+            "action_type": "qualification_mission",
+            "title": f"Qualifier la mission détectée avec {lead.name}",
+            "rationale": "Une mission existe : sécuriser le périmètre, le TJM, le rythme hybride et le processus de décision.",
+            "message": (
+                f"Bonjour {first_name}, merci pour cette piste. Pour confirmer rapidement mon positionnement, "
+                "pourriez-vous me partager le périmètre détaillé, la date de démarrage, la durée, le rythme sur site, "
+                "le budget/TJM et les prochaines étapes du processus ?"
+            ),
+            "target_stage": "mission_detectee",
+            "priority": 100,
+        }
+    if lead.stage in ("mise_en_relation", "partenaire_apporteur") and age >= 7:
+        return {
+            "action_type": "activation_reseau",
+            "title": f"Réactiver la relation avec {lead.name}",
+            "rationale": "Le contact peut devenir apporteur d’affaires : entretenir la relation avec une demande précise et réciproque.",
+            "message": (
+                f"Bonjour {first_name}, je me permets de reprendre contact. Je reste disponible pour des missions "
+                "d’architecture, de gouvernance ou de delivery Salesforce. De votre côté, y a-t-il un besoin sur lequel "
+                "je pourrais vous aider ou une compétence de mon réseau que vous recherchez actuellement ?"
+            ),
+            "target_stage": "partenaire_apporteur",
+            "priority": base_priority,
+        }
+    if lead.stage in ("a_nourrir", "a_reactiver") and age >= 14:
+        return {
+            "action_type": "reactivation",
+            "title": f"Revenir dans le radar de {lead.name}",
+            "rationale": f"Relation inactive depuis {age} jours : apporter une information utile plutôt qu’une simple relance.",
+            "message": (
+                f"Bonjour {first_name}, je me permets de reprendre contact. Je travaille actuellement sur les leviers "
+                "d’harmonisation et d’agentification du CRM pour améliorer adoption, conversion et qualité de service. "
+                "Est-ce un sujet présent dans vos priorités ou celles de vos clients cette année ?"
+            ),
+            "target_stage": "a_nourrir",
+            "priority": base_priority,
+        }
+    return None
+
+
+def sales_agent_briefing(db: Session) -> SalesAgentBriefing:
+    now = datetime.utcnow()
+    actions = db.scalars(
+        select(LeadAction)
+        .where(LeadAction.status.in_(("pending", "snoozed")))
+        .order_by(LeadAction.due_at.asc(), LeadAction.priority.desc())
+    ).all()
+    items = [SalesAgentActionOut(
+        id=action.id,
+        lead_id=action.lead_id,
+        lead_name=action.lead.name,
+        lead_company=action.lead.company,
+        linkedin_url=action.lead.linkedin_url,
+        action_type=action.action_type,
+        title=action.title,
+        rationale=action.rationale,
+        message=action.message,
+        target_stage=action.target_stage,
+        priority=action.priority,
+        status=action.status,
+        due_at=action.due_at,
+        created_at=action.created_at,
+    ) for action in actions]
+    active_leads = db.scalar(select(func.count()).select_from(Lead).where(Lead.stage != "hors_cible")) or 0
+    due = [action for action in actions if action.due_at <= now]
+    return SalesAgentBriefing(
+        generated_at=now,
+        active_leads=active_leads,
+        due_actions=len(due),
+        overdue_actions=sum(action.due_at.date() < now.date() for action in due),
+        high_priority_actions=sum(action.priority >= 75 for action in due),
+        actions=items,
+    )
+
+
+@app.post("/api/sales-agent/run", response_model=SalesAgentBriefing)
+def run_sales_agent(db: Session = Depends(get_db)):
+    now = datetime.utcnow()
+    active_lead_ids = set(db.scalars(
+        select(LeadAction.lead_id).where(LeadAction.status.in_(("pending", "snoozed")))
+    ).all())
+    leads = db.scalars(select(Lead).where(Lead.stage != "hors_cible")).all()
+    for lead in leads:
+        if lead.id in active_lead_ids:
+            continue
+        plan = sales_agent_plan(lead)
+        if not plan:
+            continue
+        db.add(LeadAction(lead_id=lead.id, due_at=now, status="pending", **plan))
+    for action in db.scalars(
+        select(LeadAction).where(LeadAction.status == "snoozed", LeadAction.due_at <= now)
+    ).all():
+        action.status = "pending"
+    db.commit()
+    return sales_agent_briefing(db)
+
+
+@app.get("/api/sales-agent/briefing", response_model=SalesAgentBriefing)
+def get_sales_agent_briefing(db: Session = Depends(get_db)):
+    return sales_agent_briefing(db)
+
+
+@app.post("/api/sales-agent/actions/{action_id}/confirm", response_model=SalesAgentBriefing)
+def confirm_sales_agent_action(action_id: int, payload: SalesAgentConfirm, db: Session = Depends(get_db)):
+    action = db.get(LeadAction, action_id)
+    if not action or action.status not in ("pending", "snoozed"):
+        raise HTTPException(404, "Action commerciale active introuvable")
+    if action.action_type != "preparation_rendez_vous" and not payload.message.strip():
+        raise HTTPException(422, "Le message validé ne peut pas être vide")
+    if payload.message.strip():
+        action.message = payload.message.strip()
+    action.status = "completed"
+    action.completed_at = datetime.utcnow()
+    action.lead.stage = action.target_stage
+    action.lead.score, action.lead.score_details = score_lead(action.lead)
+    db.commit()
+    return sales_agent_briefing(db)
+
+
+@app.post("/api/sales-agent/actions/{action_id}/snooze", response_model=SalesAgentBriefing)
+def snooze_sales_agent_action(action_id: int, payload: SalesAgentSnooze, db: Session = Depends(get_db)):
+    action = db.get(LeadAction, action_id)
+    if not action or action.status not in ("pending", "snoozed"):
+        raise HTTPException(404, "Action commerciale active introuvable")
+    action.status = "snoozed"
+    action.due_at = datetime.utcnow() + timedelta(days=payload.days)
+    db.commit()
+    return sales_agent_briefing(db)
+
+
+@app.get("/api/automation/outreach/candidates", response_model=list[AutomatedOutreachCandidate])
+def automated_outreach_candidates(limit: int = 10, db: Session = Depends(get_db)):
+    """Return high-confidence first contacts for the authorized outreach runner."""
+    limit = max(1, min(limit, 10))
+    start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    sent_today = db.scalar(
+        select(func.count()).select_from(LeadAction).where(
+            LeadAction.action_type == "auto_first_contact",
+            LeadAction.completed_at >= start_of_day,
+        )
+    ) or 0
+    remaining = max(0, 10 - sent_today)
+    if not remaining:
+        return []
+
+    leads = db.scalars(
+        select(Lead)
+        .where(Lead.stage.in_(("nouvelle", "a_contacter")))
+        .order_by(Lead.score.desc(), Lead.connected_on.desc(), Lead.created_at.desc())
+    ).all()
+    result = []
+    for lead in leads:
+        lead.score, lead.score_details = score_lead(lead)
+        name_parts = [part.strip(".,- ") for part in lead.name.split() if part.strip(".,- ")]
+        identity_is_clear = len(name_parts) >= 2 and all(len(part) > 1 for part in name_parts)
+        if lead.score <= 80 or not identity_is_clear:
+            continue
+        _, _, message = post_acceptance_message(lead, lead.name.split()[0])
+        identity = lead.score_details.get("identite_prospect", {})
+        result.append(AutomatedOutreachCandidate(
+            lead_id=lead.id,
+            name=lead.name,
+            company=lead.company,
+            headline=lead.headline,
+            linkedin_url=lead.linkedin_url,
+            score=lead.score,
+            prospect_type=identity.get("type", "contact à qualifier"),
+            competencies=lead.score_details.get("competences", ["À qualifier"]),
+            message=message,
+        ))
+        if len(result) >= min(limit, remaining):
+            break
+    # This is a read endpoint. Roll back the transient score refresh so a
+    # simple candidate lookup cannot modify ``updated_at`` and postpone work.
+    db.rollback()
+    return result
+
+
+@app.post("/api/automation/outreach/{lead_id}/sent", response_model=LeadOut)
+def confirm_automated_outreach(lead_id: int, payload: AutomatedOutreachSent, db: Session = Depends(get_db)):
+    """Record a message only after the external runner confirms the actual send."""
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Piste introuvable")
+    lead.score, lead.score_details = score_lead(lead)
+    if lead.score <= 80 or lead.stage not in ("nouvelle", "a_contacter"):
+        raise HTTPException(409, "Cette piste n’est plus éligible au premier contact automatique")
+    now = datetime.utcnow()
+    action_type = "existing_first_contact" if payload.already_existed else "auto_first_contact"
+    db.add(LeadAction(
+        lead_id=lead.id,
+        action_type=action_type,
+        title=(f"Premier contact existant réconcilié pour {lead.name}" if payload.already_existed else f"Premier contact automatique envoyé à {lead.name}"),
+        rationale=(
+            "Conversation LinkedIn antérieure confirmée visuellement ; statut CRM rapproché sans nouvel envoi."
+            if payload.already_existed else
+            "Score supérieur à 80 et profil classé dans une cible CRM/Salesforce pertinente."
+        ),
+        message=payload.message.strip(),
+        target_stage="message_envoye",
+        priority=lead.score,
+        status="completed",
+        due_at=now,
+        completed_at=now,
+    ))
+    lead.stage = "message_envoye"
+    lead.score, lead.score_details = score_lead(lead)
+    db.commit()
+    db.refresh(lead)
+    return lead
+
+
+@app.get("/api/automation/follow-ups/candidates", response_model=list[AutomatedFollowupCandidate])
+def automated_followup_candidates(limit: int = 5, db: Session = Depends(get_db)):
+    """Return due post-Waalaxy messages, capped to five actual sends per day."""
+    limit = max(1, min(limit, 5))
+    now = datetime.utcnow()
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    sent_today = db.scalar(
+        select(func.count()).select_from(LeadAction).where(
+            LeadAction.action_type.in_(tuple(FOLLOWUP_ACTION_TYPES.values())),
+            LeadAction.completed_at >= start_of_day,
+        )
+    ) or 0
+    remaining = max(0, 5 - sent_today)
+    if not remaining:
+        return []
+
+    leads = db.scalars(
+        select(Lead)
+        .where(Lead.stage == "message_envoye")
+        .order_by(Lead.score.desc(), Lead.updated_at.asc())
+    ).all()
+    candidates = []
+    for lead in leads:
+        lead.score, lead.score_details = score_lead(lead)
+        name_parts = [part.strip(".,- ") for part in lead.name.split() if part.strip(".,- ")]
+        if lead.score <= 80 or len(name_parts) < 2 or not all(len(part) > 1 for part in name_parts):
+            continue
+        plan = automated_followup_plan(lead, db)
+        if not plan or plan["due_at"] > now:
+            continue
+        identity = lead.score_details.get("identite_prospect", {})
+        candidates.append(AutomatedFollowupCandidate(
+            lead_id=lead.id,
+            name=lead.name,
+            company=lead.company,
+            headline=lead.headline,
+            linkedin_url=lead.linkedin_url,
+            score=lead.score,
+            prospect_type=identity.get("type", "contact à qualifier"),
+            competencies=lead.score_details.get("competences", ["À qualifier"]),
+            **plan,
+        ))
+        if len(candidates) >= min(limit, remaining):
+            break
+    # Keep candidate discovery read-only; message confirmation endpoints own
+    # all persistent changes.
+    db.rollback()
+    return candidates
+
+
+@app.post("/api/automation/follow-ups/{lead_id}/sent", response_model=LeadOut)
+def confirm_automated_followup(lead_id: int, payload: AutomatedFollowupSent, db: Session = Depends(get_db)):
+    """Record a follow-up only after the runner confirms the message was sent."""
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Piste introuvable")
+    lead.score, lead.score_details = score_lead(lead)
+    plan = automated_followup_plan(lead, db)
+    if not plan or plan["due_at"] > datetime.utcnow() or plan["sequence_step"] != payload.sequence_step:
+        raise HTTPException(409, "Cette relance n’est plus éligible ou ne correspond pas à la prochaine étape")
+    now = datetime.utcnow()
+    target_stage = "a_nourrir" if payload.sequence_step == "reactivation_j30" else "message_envoye"
+    db.add(LeadAction(
+        lead_id=lead.id,
+        action_type=FOLLOWUP_ACTION_TYPES[payload.sequence_step],
+        title=f"Suivi automatique {payload.sequence_step} envoyé à {lead.name}",
+        rationale=plan["objective"],
+        message=payload.message.strip(),
+        target_stage=target_stage,
+        priority=lead.score,
+        status="completed",
+        due_at=plan["due_at"],
+        completed_at=now,
+    ))
+    lead.stage = target_stage
+    lead.score, lead.score_details = score_lead(lead)
+    db.commit()
+    db.refresh(lead)
+    return lead
+
+
+@app.post("/api/automation/follow-ups/{lead_id}/response", response_model=LeadOut)
+def record_automated_lead_response(lead_id: int, payload: AutomatedLeadResponse, db: Session = Depends(get_db)):
+    """Stop the no-response sequence as soon as an inbound LinkedIn reply is detected."""
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Piste introuvable")
+    now = datetime.utcnow()
+    db.add(LeadAction(
+        lead_id=lead.id,
+        action_type="inbound_response",
+        title=f"Réponse LinkedIn reçue de {lead.name}",
+        rationale="Le prospect a répondu : la séquence automatique sans réponse est arrêtée et la qualification devient prioritaire.",
+        message=payload.message.strip(),
+        target_stage="echange_en_cours",
+        priority=100,
+        status="completed",
+        due_at=now,
+        completed_at=now,
+    ))
+    lead.stage = "echange_en_cours"
+    lead.score, lead.score_details = score_lead(lead)
+    db.commit()
+    db.refresh(lead)
+    return lead
 
 
 @app.get("/api/opportunities", response_model=list[OpportunityOut])
@@ -420,7 +1037,7 @@ def create_opportunity(payload: OpportunityCreate, db: Session = Depends(get_db)
 
 
 @app.patch("/api/opportunities/{opportunity_id}/stage", response_model=OpportunityOut)
-def update_stage(opportunity_id: int, payload: StageUpdate, db: Session = Depends(get_db)):
+def update_stage(opportunity_id: int, payload: OpportunityStageUpdate, db: Session = Depends(get_db)):
     opportunity = db.get(Opportunity, opportunity_id)
     if not opportunity:
         raise HTTPException(404, "Mission introuvable")

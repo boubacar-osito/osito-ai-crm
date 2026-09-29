@@ -63,6 +63,34 @@ class Lead(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class LeadImportRun(Base):
+    __tablename__ = "lead_import_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(120), default="LinkedIn — import automatique")
+    examined: Mapped[int] = mapped_column(Integer, default=0)
+    created: Mapped[int] = mapped_column(Integer, default=0)
+    duplicates: Mapped[int] = mapped_column(Integer, default=0)
+    total_leads: Mapped[int] = mapped_column(Integer, default=0)
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class LeadAction(Base):
+    __tablename__ = "lead_actions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(80), default="message")
+    title: Mapped[str] = mapped_column(String(240))
+    rationale: Mapped[str] = mapped_column(Text, default="")
+    message: Mapped[str] = mapped_column(Text, default="")
+    target_stage: Mapped[str] = mapped_column(String(60), default="message_envoye")
+    priority: Mapped[int] = mapped_column(Integer, default=50)
+    status: Mapped[str] = mapped_column(String(40), default="pending", index=True)
+    due_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    lead: Mapped[Lead] = relationship()
+
+
 class Opportunity(Base):
     __tablename__ = "opportunities"
     id: Mapped[int] = mapped_column(primary_key=True)
