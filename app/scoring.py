@@ -64,7 +64,7 @@ def extract_keywords(text: str) -> list[str]:
     return sorted(term for term in candidates if contains(text, term))
 
 
-def build_ats_result(opportunity, profile) -> dict:
+def build_ats_result(opportunity, profile, *, include_soft_skill_profile: bool = True) -> dict:
     job_keywords = extract_keywords(f"{opportunity.title} {opportunity.description}")
     cv_source = f"{profile.title} {profile.summary} {' '.join(profile.skills)} {profile.cv_text}"
     matched = [kw for kw in job_keywords if contains(cv_source, kw)]
@@ -73,7 +73,7 @@ def build_ats_result(opportunity, profile) -> dict:
     ordered = sorted(profile.skills, key=lambda skill: (not contains(opportunity.description, skill), skill.lower()))
     highlights = ", ".join(matched[:6]) or "expertise Salesforce"
     summary = profile.summary.strip()
-    posture = getattr(profile, "soft_skill_profile", "").strip()
+    posture = getattr(profile, "soft_skill_profile", "").strip() if include_soft_skill_profile else ""
     if summary:
         tailored = f"{profile.title or 'Consultant Salesforce'} — {summary} Compétences particulièrement pertinentes pour cette mission : {highlights}."
     else:

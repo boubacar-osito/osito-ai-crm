@@ -42,6 +42,38 @@ def test_build_targeted_cv_updates_title_and_summary_without_changing_master():
     assert result.core_properties.title == "CV ciblé — Chef de projet Salesforce"
 
 
+def test_build_targeted_cv_never_exports_internal_soft_skill_assessment():
+    source = Document()
+    source.add_paragraph("Architecte Salesforce")
+    source.add_paragraph("Boubacar DIABY")
+    source.add_paragraph("boubacar@example.com")
+    source.add_paragraph(
+        "Architecte CRM senior avec une solide expérience de l'architecture, "
+        "du cadrage et du delivery de programmes Salesforce internationaux."
+    )
+    buffer = BytesIO()
+    source.save(buffer)
+    opportunity = SimpleNamespace(
+        title="Chef de Projet Salesforce - Media - Paris",
+        company="EASY PARTNER",
+        description="Pilotage Salesforce, delivery et intégration CRM",
+    )
+    profile = SimpleNamespace(
+        title="Architecte CRM-SI senior",
+        summary="Plus de 20 ans d'expérience SI, dont plus de 10 ans sur Salesforce.",
+        skills=["Salesforce", "CRM", "Delivery", "Intégration"],
+        cv_text="Salesforce CRM delivery intégration",
+        soft_skill_profile="Synthèse AssessFirst SWIPE / DRIVE / BRAIN strictement interne",
+    )
+
+    generated = build_targeted_cv(buffer.getvalue(), opportunity, profile)
+    generated_text = "\n".join(paragraph.text for paragraph in Document(BytesIO(generated)).paragraphs)
+
+    assert "AssessFirst" not in generated_text
+    assert "SWIPE" not in generated_text
+    assert "Posture professionnelle" not in generated_text
+
+
 def test_targeted_cv_filename_is_safe_and_identifies_the_mission():
     opportunity = SimpleNamespace(title="Architecte Salesforce – Île-de-France", company="Société Média")
 

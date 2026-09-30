@@ -47,7 +47,9 @@ def _headline(ats: dict) -> str:
 def build_targeted_cv(master_content: bytes, opportunity, profile) -> bytes:
     """Create a tailored copy of the master CV without changing the stored original."""
     document = Document(BytesIO(master_content))
-    ats = build_ats_result(opportunity, profile)
+    # Internal assessments (for example AssessFirst notes) may inform the
+    # private ATS analysis, but must never be copied verbatim into a CV.
+    ats = build_ats_result(opportunity, profile, include_soft_skill_profile=False)
     visible_paragraphs = [paragraph for paragraph in document.paragraphs if paragraph.text.strip()]
     if not visible_paragraphs:
         raise ValueError("Le CV maître ne contient aucun paragraphe exploitable")
