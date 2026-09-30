@@ -69,6 +69,13 @@ def _harmonize_impact_business_fonts(document) -> None:
                 _set_run_font(run, "Arial")
 
 
+def _remove_trailing_empty_paragraphs(document) -> None:
+    """Avoid blank trailing pages caused by empty paragraphs in the master CV."""
+    while document.paragraphs and not document.paragraphs[-1].text.strip():
+        paragraph_element = document.paragraphs[-1]._element
+        paragraph_element.getparent().remove(paragraph_element)
+
+
 def build_targeted_cv(master_content: bytes, opportunity, profile) -> bytes:
     """Create a tailored copy of the master CV without changing the stored original."""
     document = Document(BytesIO(master_content))
@@ -99,6 +106,7 @@ def build_targeted_cv(master_content: bytes, opportunity, profile) -> bytes:
         _replace_text_runs(summary_paragraph, ats["tailored_summary"])
 
     _harmonize_impact_business_fonts(document)
+    _remove_trailing_empty_paragraphs(document)
 
     document.core_properties.title = f"CV ciblé — {title}"
     document.core_properties.subject = opportunity.company or "Mission Salesforce"

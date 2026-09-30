@@ -114,6 +114,36 @@ def test_build_targeted_cv_harmonizes_impact_business_fonts():
     assert generated.paragraphs[8].runs[0].font.name == "Cambria"
 
 
+def test_build_targeted_cv_removes_trailing_empty_paragraphs():
+    source = Document()
+    source.add_paragraph("Architecte Salesforce")
+    source.add_paragraph("Boubacar DIABY")
+    source.add_paragraph("boubacar@example.com")
+    source.add_paragraph(
+        "Architecte CRM senior avec une solide expérience de l'architecture, "
+        "du cadrage et du delivery de programmes Salesforce internationaux."
+    )
+    source.add_paragraph("")
+    buffer = BytesIO()
+    source.save(buffer)
+    opportunity = SimpleNamespace(
+        title="Chef de Projet Salesforce",
+        company="Groupe Média",
+        description="Pilotage Salesforce et delivery CRM",
+    )
+    profile = SimpleNamespace(
+        title="Architecte CRM-SI senior",
+        summary="Plus de 20 ans d'expérience SI, dont plus de 10 ans sur Salesforce.",
+        skills=["Salesforce", "CRM", "Delivery"],
+        cv_text="Salesforce CRM delivery",
+        soft_skill_profile="",
+    )
+
+    generated = Document(BytesIO(build_targeted_cv(buffer.getvalue(), opportunity, profile)))
+
+    assert generated.paragraphs[-1].text.strip()
+
+
 def test_targeted_cv_filename_is_safe_and_identifies_the_mission():
     opportunity = SimpleNamespace(title="Architecte Salesforce – Île-de-France", company="Société Média")
 
