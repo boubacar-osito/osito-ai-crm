@@ -21,6 +21,7 @@ from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
+from .cv_generation import WORD_CONTENT_TYPE, build_targeted_cv, targeted_cv_filename
 from .database import Base, engine, get_db
 from .models import CandidateDocument, CandidateProfile, Contact, Lead, LeadAction, LeadImportRun, Opportunity
 from .schemas import ATSRequest, ATSResult, AutomatedFollowupCandidate, AutomatedFollowupSent, AutomatedLeadResponse, AutomatedOutreachCandidate, AutomatedOutreachSent, ContactCreate, LeadCoachRequest, LeadCoachResult, LeadCreate, LeadImportBatch, LeadImportResult, LeadImportStatus, LeadOut, LeadStageUpdate, OpportunityCoachResult, OpportunityCreate, OpportunityOut, OpportunityStageUpdate, ProfileOut, ProfilePayload, SalesAgentActionOut, SalesAgentBriefing, SalesAgentConfirm, SalesAgentSnooze
@@ -231,12 +232,18 @@ def download_base_cv(db: Session = Depends(get_db)):
 @app.get("/api/profile/cv/pdf")
 def download_base_cv_pdf(db: Session = Depends(get_db)):
     document = current_document(db)
+    pdf = convert_docx_to_pdf(document.content)
+    output_name = f"{Path(document.filename).stem}.pdf"
+    return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{output_name}"'})
+
+
+def convert_docx_to_pdf(content: bytes) -> bytes:
     converter = shutil.which("libreoffice") or shutil.which("soffice")
     if not converter:
         raise HTTPException(503, "Le convertisseur PDF n'est pas disponible sur le serveur")
     with TemporaryDirectory(prefix="missionflow-cv-") as directory:
         source = Path(directory) / "cv.docx"
-        source.write_bytes(document.content)
+        source.write_bytes(content)
         profile_uri = (Path(directory) / "libreoffice-profile").as_uri()
         result = subprocess.run(
             [converter, f"-env:UserInstallation={profile_uri}", "--headless", "--convert-to", "pdf", "--outdir", directory, str(source)],
@@ -248,9 +255,7 @@ def download_base_cv_pdf(db: Session = Depends(get_db)):
         pdf_path = Path(directory) / "cv.pdf"
         if result.returncode or not pdf_path.exists():
             raise HTTPException(500, "La génération du PDF a échoué")
-        pdf = pdf_path.read_bytes()
-    output_name = f"{Path(document.filename).stem}.pdf"
-    return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{output_name}"'})
+        return pdf_path.read_bytes()
 
 
 @app.post("/api/contacts")
@@ -1070,6 +1075,44 @@ def coach_opportunity(opportunity_id: int, db: Session = Depends(get_db)):
         next_action="Relancer brièvement avec une question simple sur l'avancement du besoin.",
         suggested_stage=opportunity.stage,
         suggested_message=f"Bonjour, je reviens vers vous au sujet de la mission {title}. Mon expérience en architecture et delivery CRM/Salesforce reste très alignée avec le besoin présenté. Le processus de sélection est-il toujours en cours ? Je reste disponible pour un échange rapide et peux vous renvoyer mon CV ciblé si nécessaire.",
+    )
+
+
+def targeted_cv_for_opportunity(opportunity_id: int, db: Session) -> tuple[Opportunity, bytes]:
+    opportunity = db.get(Opportunity, opportunity_id)
+    if not opportunity:
+        raise HTTPException(404, "Mission introuvable")
+    profile = db.scalar(select(CandidateProfile).limit(1))
+    if not profile:
+        raise HTTPException(400, "Complète d'abord ton profil")
+    document = current_document(db)
+    try:
+        content = build_targeted_cv(document.content, opportunity, profile)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(422, f"Le CV maître n'a pas pu être adapté : {exc}") from exc
+    return opportunity, content
+
+
+@app.get("/api/opportunities/{opportunity_id}/cv/word")
+def download_opportunity_cv_word(opportunity_id: int, db: Session = Depends(get_db)):
+    opportunity, content = targeted_cv_for_opportunity(opportunity_id, db)
+    filename = targeted_cv_filename(opportunity)
+    return Response(
+        content=content,
+        media_type=WORD_CONTENT_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/opportunities/{opportunity_id}/cv/pdf")
+def download_opportunity_cv_pdf(opportunity_id: int, db: Session = Depends(get_db)):
+    opportunity, content = targeted_cv_for_opportunity(opportunity_id, db)
+    pdf = convert_docx_to_pdf(content)
+    filename = targeted_cv_filename(opportunity, "pdf")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
