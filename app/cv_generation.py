@@ -3,6 +3,7 @@ import unicodedata
 from io import BytesIO
 
 from docx import Document
+from docx.oxml.ns import qn
 
 from .scoring import build_ats_result
 
@@ -44,6 +45,30 @@ def _headline(ats: dict) -> str:
     return " | ".join(keywords[:4]) or "Salesforce | Architecture CRM | Delivery"
 
 
+def _set_run_font(run, font_name: str) -> None:
+    """Set every Word font slot so the result is stable across renderers."""
+    run.font.name = font_name
+    run_properties = run._element.get_or_add_rPr()
+    run_fonts = run_properties.get_or_add_rFonts()
+    for slot in ("ascii", "hAnsi", "eastAsia", "cs"):
+        run_fonts.set(qn(f"w:{slot}"), font_name)
+
+
+def _harmonize_impact_business_fonts(document) -> None:
+    """Keep the Impact Business bullets in the CV's main Arial typeface."""
+    in_impact_section = False
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if text.upper() == "IMPACT BUSINESS":
+            in_impact_section = True
+            continue
+        if in_impact_section and text.upper() == "EXPÉRIENCES PROFESSIONNELLES":
+            break
+        if in_impact_section:
+            for run in paragraph.runs:
+                _set_run_font(run, "Arial")
+
+
 def build_targeted_cv(master_content: bytes, opportunity, profile) -> bytes:
     """Create a tailored copy of the master CV without changing the stored original."""
     document = Document(BytesIO(master_content))
@@ -72,6 +97,8 @@ def build_targeted_cv(master_content: bytes, opportunity, profile) -> bytes:
     )
     if summary_paragraph is not None:
         _replace_text_runs(summary_paragraph, ats["tailored_summary"])
+
+    _harmonize_impact_business_fonts(document)
 
     document.core_properties.title = f"CV ciblé — {title}"
     document.core_properties.subject = opportunity.company or "Mission Salesforce"
