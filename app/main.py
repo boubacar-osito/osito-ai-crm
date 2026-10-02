@@ -32,6 +32,7 @@ from .scoring import build_ats_result, score_lead, score_opportunity
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     existing_columns = {column["name"] for column in inspect(engine).get_columns("candidate_profiles")}
+    opportunity_columns = {column["name"] for column in inspect(engine).get_columns("opportunities")}
     profile_insight_columns = {
         "soft_skill_profile": "TEXT NOT NULL DEFAULT ''",
         "work_preferences": "TEXT NOT NULL DEFAULT ''",
@@ -41,6 +42,10 @@ async def lifespan(_: FastAPI):
         for column, definition in profile_insight_columns.items():
             if column not in existing_columns:
                 connection.execute(text(f"ALTER TABLE candidate_profiles ADD COLUMN {column} {definition}"))
+        if "published_on" not in opportunity_columns:
+            connection.execute(text("ALTER TABLE opportunities ADD COLUMN published_on DATE"))
+        if "published_on_is_estimated" not in opportunity_columns:
+            connection.execute(text("ALTER TABLE opportunities ADD COLUMN published_on_is_estimated BOOLEAN NOT NULL DEFAULT FALSE"))
     with Session(engine) as db:
         if not db.scalar(select(CandidateProfile).limit(1)):
             db.add(CandidateProfile())

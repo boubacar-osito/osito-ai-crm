@@ -166,6 +166,30 @@ def test_authenticated_user_can_archive_and_restore_an_opportunity():
         assert restored.json()["stage"] == "nouvelle"
 
 
+def test_opportunity_exposes_publication_date():
+    with TestClient(app) as client:
+        client.post("/login", data={"username": "admin", "password": "development-only"})
+        response = client.post(
+            "/api/opportunities",
+            json={
+                "title": "Responsable CRM Salesforce",
+                "company": "TRIBU",
+                "description": "RUN et gouvernance Salesforce",
+                "published_on": "2026-10-02",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["published_on"] == "2026-10-02"
+        assert response.json()["published_on_is_estimated"] is False
+        listed = client.get("/api/opportunities")
+        assert listed.status_code == 200
+        assert any(
+            item["title"] == "Responsable CRM Salesforce"
+            and item["published_on"] == "2026-10-02"
+            for item in listed.json()
+        )
+
+
 def test_invalid_opportunity_stage_is_rejected():
     with TestClient(app) as client:
         client.post("/login", data={"username": "admin", "password": "development-only"})

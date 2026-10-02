@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, LargeBinary, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -101,6 +101,8 @@ class Opportunity(Base):
     work_mode: Mapped[str] = mapped_column(String(80), default="")
     daily_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_url: Mapped[str] = mapped_column(String(700), default="")
+    published_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    published_on_is_estimated: Mapped[bool] = mapped_column(Boolean, default=False)
     stage: Mapped[str] = mapped_column(String(60), default="nouvelle")
     score: Mapped[int] = mapped_column(Integer, default=0)
     score_details: Mapped[dict] = mapped_column(JSON, default=dict)

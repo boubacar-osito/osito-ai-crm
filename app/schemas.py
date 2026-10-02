@@ -41,6 +41,8 @@ class OpportunityCreate(BaseModel):
     work_mode: str = ""
     daily_rate: int | None = None
     source_url: str = ""
+    published_on: date | None = None
+    published_on_is_estimated: bool = False
     stage: str = "nouvelle"
     contact_id: int | None = None
 
